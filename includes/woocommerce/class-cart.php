@@ -39,6 +39,15 @@ final class Cart {
         }
         // If designer is enabled, customer MUST save a design before adding to cart.
         $design_id = isset( $_POST['pd_design_id'] ) ? sanitize_text_field( wp_unslash( $_POST['pd_design_id'] ) ) : '';
+
+        // Fallback pe WC Session (pentru AJAX add-to-cart / Store API / blocks).
+        if ( $design_id === '' && function_exists( 'WC' ) && WC()->session ) {
+            $saved = WC()->session->get( 'pd_design_for_' . $product_id );
+            if ( is_array( $saved ) && ! empty( $saved['design_id'] ) ) {
+                $design_id = (string) $saved['design_id'];
+            }
+        }
+
         if ( $design_id === '' ) {
             wc_add_notice( __( 'Te rugăm să personalizezi produsul înainte de a-l adăuga în coș.', 'product-designer' ), 'error' );
             return false;
@@ -48,20 +57,50 @@ final class Cart {
 
     public function capture_design( array $cart_item_data, int $product_id, int $variation_id ) : array {
         if ( ! $this->storage->is_enabled_for_product( $product_id ) ) {
+            $this->debug_log( "capture_design: product $product_id nu are designer activat, skip." );
             return $cart_item_data;
         }
 
+        // 1) Calea clasică: hidden inputs din form.cart ajung în $_POST.
         $design_id   = isset( $_POST['pd_design_id'] )   ? sanitize_text_field( wp_unslash( $_POST['pd_design_id'] ) )   : '';
         $preview_url = isset( $_POST['pd_preview_url'] ) ? esc_url_raw( wp_unslash( $_POST['pd_preview_url'] ) )          : '';
         $json_url    = isset( $_POST['pd_json_url'] )    ? esc_url_raw( wp_unslash( $_POST['pd_json_url'] ) )             : '';
 
+        // 2) Fallback: citește din WC Session (completat de REST la save).
+        // Robust pentru AJAX add-to-cart, Store API (blocks), și orice alt path
+        // care nu trimite hidden inputs în $_POST.
+        if ( $design_id === '' && function_exists( 'WC' ) && WC()->session ) {
+            $saved = WC()->session->get( 'pd_design_for_' . $product_id );
+            if ( is_array( $saved ) && ! empty( $saved['design_id'] ) ) {
+                $design_id   = (string) $saved['design_id'];
+                $preview_url = (string) ( $saved['preview_url'] ?? '' );
+                $json_url    = (string) ( $saved['json_url'] ?? '' );
+                $this->debug_log( "capture_design: design_id preluat din WC Session: $design_id" );
+            }
+        }
+
+        $this->debug_log( sprintf(
+            'capture_design: product=%d, design_id="%s", POST keys: %s',
+            $product_id,
+            $design_id,
+            implode( ',', array_filter( array_keys( $_POST ), function ( $k ) { return strpos( (string) $k, 'pd_' ) === 0; } ) )
+        ) );
+
         if ( $design_id === '' ) {
+            $this->debug_log( 'capture_design: design_id gol și în POST și în session — add-to-cart fără design.' );
             return $cart_item_data;
         }
 
         // Confirm the design actually exists on disk before attaching.
         $files = $this->storage->get_design_files( $design_id );
         if ( ! is_readable( $files['json']['path'] ) || ! is_readable( $files['png']['path'] ) ) {
+            $this->debug_log( sprintf(
+                'capture_design: fișiere LIPSĂ pe disk: json=%s (readable=%s), png=%s (readable=%s)',
+                $files['json']['path'],
+                is_readable( $files['json']['path'] ) ? 'da' : 'nu',
+                $files['png']['path'],
+                is_readable( $files['png']['path'] ) ? 'da' : 'nu'
+            ) );
             return $cart_item_data;
         }
 
@@ -72,7 +111,14 @@ final class Cart {
             // Unique key forces WC to treat items with different designs as separate rows.
             'unique_key'  => md5( $design_id ),
         ];
+        $this->debug_log( "capture_design: OK — design_id $design_id atașat la cart item." );
         return $cart_item_data;
+    }
+
+    private function debug_log( string $msg ) : void {
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            error_log( '[Product Designer] ' . $msg );
+        }
     }
 
     public function display_in_cart( array $item_data, array $cart_item ) : array {

@@ -113,6 +113,47 @@ final class Rest_Api {
             return new WP_Error( 'pd_persist_failed', $persisted['error'] ?? '', [ 'status' => 500 ] );
         }
 
+        // Stochează designul în WC Session keyed by product_id.
+        // Asta face fluxul cart→order robust indiferent de cum face tema
+        // add-to-cart: clasic form POST, AJAX, sau Store API (blocks).
+        $session_saved = false;
+        if ( function_exists( 'WC' ) && WC() ) {
+            // În context REST, WC session uneori nu e inițializată încă.
+            if ( ! WC()->session ) {
+                $handler = apply_filters( 'woocommerce_session_handler', 'WC_Session_Handler' );
+                if ( class_exists( $handler ) ) {
+                    WC()->session = new $handler();
+                    WC()->session->init();
+                }
+            }
+            if ( WC()->session ) {
+                if ( ! WC()->session->has_session() ) {
+                    WC()->session->set_customer_session_cookie( true );
+                }
+                WC()->session->set( 'pd_design_for_' . $product_id, [
+                    'design_id'   => $persisted['design_id'],
+                    'preview_url' => $persisted['preview_url'],
+                    'json_url'    => $persisted['json_url'],
+                    'saved_at'    => time(),
+                ] );
+                // Save imediat în DB, nu aștepta shutdown.
+                if ( method_exists( WC()->session, 'save_data' ) ) {
+                    WC()->session->save_data();
+                }
+                $session_saved = true;
+            }
+        }
+
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            error_log( sprintf(
+                '[Product Designer] save_design: product=%d, design_id=%s, session_saved=%s, has_session=%s',
+                $product_id,
+                $persisted['design_id'],
+                $session_saved ? 'da' : 'nu',
+                ( function_exists( 'WC' ) && WC()->session && WC()->session->has_session() ) ? 'da' : 'nu'
+            ) );
+        }
+
         /**
          * Fires after a design has been persisted from the frontend editor.
          *
@@ -122,9 +163,10 @@ final class Rest_Api {
         do_action( 'pd_design_saved', $persisted, $product_id );
 
         return new WP_REST_Response( [
-            'design_id'   => $persisted['design_id'],
-            'preview_url' => $persisted['preview_url'],
-            'json_url'    => $persisted['json_url'],
+            'design_id'     => $persisted['design_id'],
+            'preview_url'   => $persisted['preview_url'],
+            'json_url'      => $persisted['json_url'],
+            'session_saved' => $session_saved,
         ], 201 );
     }
 

@@ -381,6 +381,13 @@
             $hiddenJson.val(res.json_url);
             $selPrev.prop('hidden', false).find('img').attr('src', res.preview_url);
             say(PDData.i18n.savedOk);
+            if (window.console) {
+                console.log('[PD] Design salvat:', res.design_id,
+                    '| WC Session OK:', res.session_saved ? 'DA' : 'NU');
+                if (!res.session_saved) {
+                    console.warn('[PD] ATENȚIE: session NU s-a salvat pe server. Cart→order va rata designul dacă tema face AJAX add-to-cart.');
+                }
+            }
             setTimeout(closeModal, 500);
         }).fail(function (xhr) {
             var msg = (xhr.responseJSON && xhr.responseJSON.message) || ('HTTP ' + xhr.status);
@@ -501,5 +508,17 @@
             say(PDData.i18n.empty);
             openModal();
         }
+    });
+
+    // Hook pe evenimentul WC AJAX add-to-cart: injectează design_id în payload
+    // ca să ajungă în $_POST la backend indiferent că tema folosește AJAX.
+    // Triggeruit de `woocommerce.js` standard + majoritatea temelor WC.
+    $(document.body).on('adding_to_cart', function (event, $button, data) {
+        var id = $hiddenId.val();
+        if (!id) { return; }
+        data.pd_design_id   = id;
+        data.pd_preview_url = $hiddenPng.val();
+        data.pd_json_url    = $hiddenJson.val();
+        if (window.console) { console.log('[PD] Injectat design în adding_to_cart:', data.pd_design_id); }
     });
 })(jQuery);

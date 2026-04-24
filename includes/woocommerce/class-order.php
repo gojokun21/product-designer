@@ -24,6 +24,10 @@ final class Order {
 
     public function register() : void {
         add_action( 'woocommerce_checkout_create_order_line_item', [ $this, 'transfer_to_order' ], 10, 4 );
+        // `woocommerce_order_item_name` e aplicat consistent în admin, pagina
+        // de comenzi din My Account, email-uri de comandă, thank-you page.
+        // Spre deosebire de `woocommerce_order_item_thumbnail` (care e rar folosit).
+        add_filter( 'woocommerce_order_item_name',                 [ $this, 'prepend_design_preview' ], 10, 2 );
         add_filter( 'woocommerce_order_item_thumbnail',            [ $this, 'customer_order_thumbnail' ], 10, 2 );
         add_filter( 'woocommerce_order_item_get_formatted_meta_data', [ $this, 'format_meta_display' ], 10, 2 );
     }
@@ -37,13 +41,42 @@ final class Order {
      * @param \WC_Order              $order
      */
     public function transfer_to_order( $item, $cart_item_key, $values, $order ) : void {
-        if ( empty( $values['pd_design']['design_id'] ) ) {
+        $design = isset( $values['pd_design'] ) && is_array( $values['pd_design'] ) ? $values['pd_design'] : null;
+
+        // Fallback final: dacă cart item-ul nu are design atașat dar produsul
+        // are designer activat, citim din WC Session direct la order creation.
+        if ( empty( $design['design_id'] ) ) {
+            $product_id = (int) $item->get_product_id();
+            if ( $product_id && $this->storage->is_enabled_for_product( $product_id )
+                && function_exists( 'WC' ) && WC()->session ) {
+                $saved = WC()->session->get( 'pd_design_for_' . $product_id );
+                if ( is_array( $saved ) && ! empty( $saved['design_id'] ) ) {
+                    $design = $saved;
+                    if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                        error_log( "[Product Designer] transfer_to_order: design preluat din session ca fallback pentru product $product_id." );
+                    }
+                }
+            }
+        }
+
+        if ( empty( $design['design_id'] ) ) {
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                error_log( sprintf(
+                    '[Product Designer] transfer_to_order: cart item "%s" NU are pd_design și session e gol (cart keys: %s) — nu s-a transferat nimic.',
+                    $cart_item_key,
+                    implode( ',', array_keys( $values ) )
+                ) );
+            }
             return;
         }
-        $design = $values['pd_design'];
+
         $item->add_meta_data( Design_Storage::ITEM_META_DESIGN_ID,   $design['design_id'] );
         $item->add_meta_data( Design_Storage::ITEM_META_PREVIEW_URL, $design['preview_url'] ?? '' );
         $item->add_meta_data( Design_Storage::ITEM_META_JSON_URL,    $design['json_url'] ?? '' );
+
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            error_log( "[Product Designer] transfer_to_order: OK — design_id {$design['design_id']} transferat pe order item." );
+        }
     }
 
     public function customer_order_thumbnail( string $image, $item ) : string {
@@ -58,6 +91,28 @@ final class Order {
             '<img src="%s" alt="" style="max-width:64px;height:auto;" />',
             esc_url( $preview )
         );
+    }
+
+    /**
+     * Prepinde preview-ul design-ului în fața numelui produsului. Se aplică
+     * uniform în admin, pagina de comenzi din My Account, emailuri de comandă.
+     *
+     * @param string                $name
+     * @param \WC_Order_Item_Product $item
+     */
+    public function prepend_design_preview( string $name, $item ) : string {
+        if ( ! ( $item instanceof \WC_Order_Item_Product ) ) {
+            return $name;
+        }
+        $preview = (string) $item->get_meta( Design_Storage::ITEM_META_PREVIEW_URL, true );
+        if ( ! $preview ) {
+            return $name;
+        }
+        $img = sprintf(
+            '<img src="%s" alt="" class="pd-order-design-thumb" style="max-width:72px;height:auto;vertical-align:middle;border:1px solid #ddd;padding:2px;background:#fff;margin-right:10px;" />',
+            esc_url( $preview )
+        );
+        return $img . $name;
     }
 
     /**
