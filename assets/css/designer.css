@@ -1,0 +1,277 @@
+/* Product Designer - Frontend editor */
+.pd-frontend-wrap {
+    margin: 10px 0 14px;
+}
+.pd-open-designer {
+    background: #222;
+    color: #fff;
+    border: none;
+    padding: 10px 18px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 3px;
+}
+.pd-open-designer:hover { background: #000; }
+
+.pd-selected-preview {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+/* `display: flex` de mai sus suprascrie UA stylesheet-ul pentru atributul
+   `hidden`, așa că elementul apare chiar și cu hidden="". Îl forțăm ascuns. */
+.pd-selected-preview[hidden] { display: none; }
+.pd-selected-preview img {
+    max-width: 120px;
+    height: auto;
+    border: 1px solid #ddd;
+    padding: 3px;
+    background: #fff;
+}
+.pd-clear-design {
+    background: none;
+    border: 1px solid #bbb;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    border-radius: 3px;
+}
+
+/* Modal */
+.pd-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.pd-modal[hidden] { display: none; }
+.pd-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+}
+.pd-modal__dialog {
+    position: relative;
+    background: #fff;
+    width: min(1100px, 95vw);
+    max-height: 92vh;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+.pd-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid #eee;
+}
+.pd-modal__header h2 { margin: 0; font-size: 18px; }
+.pd-modal__close {
+    background: none;
+    border: none;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    color: #666;
+}
+.pd-modal__body {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 0;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+.pd-tools {
+    padding: 14px;
+    background: #f6f7f8;
+    border-right: 1px solid #eee;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+}
+.pd-tool {
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 10px 12px;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 13px;
+}
+.pd-tool:hover:not([disabled]) { border-color: #222; }
+.pd-tool[disabled] { opacity: .5; cursor: not-allowed; }
+.pd-upload-btn { display: inline-block; }
+.pd-status { margin-top: auto; font-size: 12px; color: #555; min-height: 18px; }
+
+.pd-text-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 10px;
+    margin-top: 4px;
+    border-top: 1px solid #e0e0e0;
+}
+.pd-text-controls[hidden] { display: none; }
+.pd-text-controls__title {
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    font-weight: 600;
+}
+.pd-control-label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 11px;
+    color: #555;
+}
+.pd-control-label input,
+.pd-control-label select {
+    padding: 6px 7px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    font-size: 13px;
+    background: #fff;
+    font-family: inherit;
+}
+.pd-control-label input[type="color"] {
+    height: 34px;
+    padding: 2px;
+    cursor: pointer;
+    width: 100%;
+}
+.pd-control-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.pd-tool-small {
+    background: #fff;
+    border: 1px solid #ccc;
+    padding: 6px 10px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 14px;
+    line-height: 1;
+    min-width: 36px;
+    font-family: inherit;
+}
+.pd-tool-small:hover { border-color: #222; }
+.pd-tool-small.is-active {
+    background: #222;
+    color: #fff;
+    border-color: #222;
+}
+
+.pd-canvas-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #2e2e2e;
+    padding: 16px;
+    overflow: auto;
+}
+/* IMPORTANT: nu seta background pe TOATE canvas-urile — fabric creează un
+   upper-canvas transparent peste lower-canvas. Un background opac aici ar
+   acoperi mockup-ul și designul. Fundalul alb e deja aplicat de fabric pe
+   lower-canvas via backgroundColor în `new fabric.Canvas(...)`. */
+.pd-canvas-wrap .canvas-container { background: #fff; }
+
+.pd-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid #eaeaea;
+    background: linear-gradient(180deg, #fcfcfc, #f5f5f5);
+}
+
+/* Override WooCommerce/WP .button styles cu specificitate ridicată
+   ca să nu moștenim paleta temei. */
+.pd-modal__footer .pd-cancel,
+.pd-modal__footer .pd-save {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 120px;
+    padding: 10px 22px;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.2;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color .15s ease, border-color .15s ease,
+                color .15s ease, box-shadow .15s ease, transform .05s ease;
+    text-decoration: none;
+    font-family: inherit;
+    letter-spacing: .01em;
+}
+
+.pd-modal__footer .pd-cancel {
+    background: #fff;
+    color: #333;
+    border-color: #d0d0d0;
+    box-shadow: 0 1px 0 rgba(0,0,0,.02);
+}
+.pd-modal__footer .pd-cancel:hover {
+    background: #f4f4f4;
+    border-color: #999;
+    color: #111;
+}
+.pd-modal__footer .pd-cancel:active {
+    transform: translateY(1px);
+    background: #ececec;
+}
+
+.pd-modal__footer .pd-save {
+    background: #222;
+    color: #fff;
+    border-color: #222;
+    box-shadow: 0 2px 0 rgba(0,0,0,.15);
+}
+.pd-modal__footer .pd-save:hover {
+    background: #000;
+    border-color: #000;
+    box-shadow: 0 3px 8px rgba(0,0,0,.2);
+}
+.pd-modal__footer .pd-save:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 0 rgba(0,0,0,.15);
+}
+.pd-modal__footer .pd-save::before {
+    content: "✓";
+    font-size: 13px;
+    font-weight: 700;
+}
+.pd-modal__footer .pd-save:disabled,
+.pd-modal__footer .pd-save[disabled] {
+    background: #888;
+    border-color: #888;
+    cursor: not-allowed;
+    box-shadow: none;
+    opacity: .7;
+}
+
+.pd-modal__footer .pd-cancel:focus-visible,
+.pd-modal__footer .pd-save:focus-visible {
+    outline: 2px solid #1a73e8;
+    outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+    .pd-modal__body { grid-template-columns: 1fr; }
+    .pd-tools { flex-direction: row; flex-wrap: wrap; border-right: none; border-bottom: 1px solid #eee; }
+}

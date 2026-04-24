@@ -1,0 +1,23 @@
+/* Product Designer - Admin styles */
+.pd-mockup-preview {
+    display: block;
+    margin: 6px 0;
+}
+.pd-mockup-preview img {
+    border: 1px solid #ddd;
+    padding: 4px;
+    background: #fff;
+}
+.pd-order-design {
+    margin-top: 10px;
+    padding: 10px;
+    background: #fafafa;
+    border: 1px solid #e5e5e5;
+    border-radius: 4px;
+}
+.pd-order-design .pd-order-preview img {
+    margin: 6px 0;
+}
+.pd-order-design .pd-order-links .button {
+    margin-right: 6px;
+}
