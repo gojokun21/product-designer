@@ -25,6 +25,9 @@ final class Activator {
             ] );
         }
 
+        // Auto-creare pagină Constructor.
+        \ProductDesigner\Core\Page_Installer::install();
+
         update_option( 'pd_db_version', PD_VERSION );
     }
 

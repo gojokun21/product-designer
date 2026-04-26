@@ -1,21 +1,21 @@
-/* global jQuery, fabric, PDData */
+/* global jQuery, fabric */
 /**
  * Product Designer — Fabric.js frontend editor.
  *
- * PDData is injected via wp_localize_script and contains:
+ * PDData shape:
  *   rest.{root,nonce,uploadPath,designPath}
  *   product.{id, mockup_url}
  *   canvas.{width,height}  (fallback când produsul n-are mockup)
  *   limits.{maxUploadMB, mimeTypes}
  *   i18n.{...}
+ *
+ * PDData provine din:
+ *   - `wp_localize_script` pe single-product (auto-boot)
+ *   - constructor.js care emite event `pd:mount` cu detail = PDData
  */
 (function ($) {
     'use strict';
 
-    if (typeof PDData === 'undefined') {
-        if (window.console) { console.error('[PD] PDData missing — wp_localize_script did not run.'); }
-        return;
-    }
     if (typeof fabric === 'undefined') {
         if (window.console) { console.error('[PD] fabric.js failed to load.'); }
         $(function () {
@@ -27,29 +27,39 @@
         return;
     }
 
-    // Cache-ăm canvas-ul ORIGINAL înainte ca fabric să-și adauge upper-canvas-ul.
-    // După init, `$('.pd-canvas')` prinde AMBELE canvas-uri, ceea ce duce la bug-uri
-    // subtile dacă re-selectăm.
-    var canvasEl   = document.querySelector('.pd-canvas');
-    var $modal     = $('.pd-modal');
-    var $status    = $('.pd-status');
-    var $deleteBtn = $('.pd-delete');
-    var $hiddenId  = $('.pd-design-id');
-    var $hiddenPng = $('.pd-preview-url');
-    var $hiddenJson= $('.pd-json-url');
-    var $selPrev   = $('.pd-selected-preview');
+    // PDData mutabil intern — poate fi schimbat de constructor la fiecare produs.
+    var PDData = (typeof window.PDData !== 'undefined') ? window.PDData : null;
 
-    // Controale text
-    var $textCtrls     = $('.pd-text-controls');
-    var $textColor     = $('.pd-text-color');
-    var $textSize      = $('.pd-text-size');
-    var $textFont      = $('.pd-text-font');
-    var $textBold      = $('.pd-text-bold');
-    var $textItalic    = $('.pd-text-italic');
-    var $textUnderline = $('.pd-text-underline');
-    var $textAlign     = $('.pd-text-align');
+    // Cap rezoluția internă a canvas-ului ca să nu explodeze RAM-ul / preview-ul
+    // PNG la mockup-uri uriașe (4K+). Coordonatele rămân raportate la canvas, deci
+    // un design salvat pe un mockup capat e identic cu unul salvat pe nativ.
+    var MAX_INTERNAL_DIM = 2000;
 
+    // Selectorii sunt re-cache-uiți la fiecare boot, ca să prindă DOM-ul curent
+    // (constructorul poate înlocui markup-ul când user-ul schimbă produsul).
+    var canvasEl, $modal, $status, $deleteBtn, $hiddenId, $hiddenPng, $hiddenJson, $selPrev;
+    var $textCtrls, $textColor, $textSize, $textFont, $textBold, $textItalic, $textUnderline, $textAlign;
     var canvas = null;
+
+    function cacheSelectors() {
+        canvasEl       = document.querySelector('.pd-canvas');
+        $modal         = $('.pd-modal');
+        $status        = $('.pd-status');
+        $deleteBtn     = $('.pd-delete');
+        $hiddenId      = $('.pd-design-id');
+        $hiddenPng     = $('.pd-preview-url');
+        $hiddenJson    = $('.pd-json-url');
+        $selPrev       = $('.pd-selected-preview');
+        $textCtrls     = $('.pd-text-controls');
+        $textColor     = $('.pd-text-color');
+        $textSize      = $('.pd-text-size');
+        $textFont      = $('.pd-text-font');
+        $textBold      = $('.pd-text-bold');
+        $textItalic    = $('.pd-text-italic');
+        $textUnderline = $('.pd-text-underline');
+        $textAlign     = $('.pd-text-align');
+    }
+    cacheSelectors();
 
     function say(msg) { $status.text(msg || ''); }
 
@@ -63,9 +73,12 @@
         document.body.style.overflow = 'hidden';
         if (!canvas) {
             initCanvas();
-        } else {
-            fitCanvasToWrap(canvas.getWidth(), canvas.getHeight());
         }
+        // Așteaptă două frame-uri ca layout-ul modalului să se așeze înainte
+        // să măsurăm wrap-ul. Fără asta, prima măsurătoare prinde wrap.clientWidth=0
+        // (modalul tocmai a devenit vizibil) → scale=1 → canvas la dim. nativă → overflow.
+        scheduleRefit();
+        observeWrap();
     }
     function closeModal() {
         $modal.prop('hidden', true).attr('aria-hidden', 'true');
@@ -112,22 +125,31 @@
         if (!sameOrigin(url)) { native.crossOrigin = 'anonymous'; }
 
         native.onload = function () {
-            var w = native.naturalWidth, h = native.naturalHeight;
-            if (!w || !h) {
+            var nw = native.naturalWidth, nh = native.naturalHeight;
+            if (!nw || !nh) {
                 console.error('[PD] Mockup cu dimensiuni invalide:', url);
                 say('Mockup invalid.');
                 canvas.renderAll();
                 return;
             }
-            if (window.console) { console.log('[PD] Mockup încărcat:', url, w + 'x' + h); }
 
-            // Canvas-ul primește exact dimensiunea nativă a mockup-ului —
-            // coordonatele obiectelor salvate sunt direct în pixelii mockup-ului.
+            // Cap rezoluția internă: dacă mockup-ul depășește MAX_INTERNAL_DIM
+            // pe latura mare, micșorăm canvas-ul + scalăm imaginea în consecință.
+            var cap = Math.min(MAX_INTERNAL_DIM / nw, MAX_INTERNAL_DIM / nh, 1);
+            var w = Math.round(nw * cap);
+            var h = Math.round(nh * cap);
+
+            if (window.console) {
+                console.log('[PD] Mockup încărcat:', url,
+                    'native ' + nw + 'x' + nh +
+                    (cap < 1 ? ' → canvas redus la ' + w + 'x' + h + ' (cap ' + MAX_INTERNAL_DIM + 'px)' : ''));
+            }
+
             canvas.setDimensions({ width: w, height: h });
 
             var fImg = new fabric.Image(native, {
                 left: 0, top: 0,
-                scaleX: 1, scaleY: 1,
+                scaleX: cap, scaleY: cap,
                 originX: 'left', originY: 'top',
                 selectable: false,
                 evented: false,
@@ -138,8 +160,14 @@
             canvas.add(fImg);
             canvas.sendToBack(fImg);
 
+            // Apelul sincron prinde uneori wrap-ul cu dimensiuni stale (browser-ul
+            // n-a re-layout-uit încă pentru noul canvas-container). Schedule un
+            // re-fit în 2 frame-uri pentru măsurătoare fiabilă. Apoi observă
+            // wrap-ul ca să prindem schimbări ulterioare (modal resize, etc).
             fitCanvasToWrap(w, h);
             canvas.renderAll();
+            scheduleRefit();
+            observeWrap();
         };
         native.onerror = function () {
             console.error('[PD] Eșec la încărcarea mockup-ului:', url);
@@ -151,15 +179,55 @@
 
     function fitCanvasToWrap(innerW, innerH) {
         var wrap = $('.pd-canvas-wrap')[0];
-        if (!wrap || !innerW || !innerH || !canvas) { return; }
+        if (!wrap || !canvas) { return; }
+        // Argumentele sunt opționale — fallback la dimensiunea internă curentă
+        // a canvas-ului. Util pentru re-fit la resize.
+        innerW = innerW || canvas.getWidth();
+        innerH = innerH || canvas.getHeight();
+        if (!innerW || !innerH) { return; }
         var padding = 32;
         var availW = Math.max(100, wrap.clientWidth  - padding);
         var availH = Math.max(100, wrap.clientHeight - padding);
         var scale  = Math.min(availW / innerW, availH / innerH, 1);
         canvas.setDimensions({
-            width:  innerW * scale,
-            height: innerH * scale
+            width:  Math.round(innerW * scale),
+            height: Math.round(innerH * scale)
         }, { cssOnly: true });
+    }
+
+    // Re-fit programat în următoarele 2 animation frame-uri. Necesar după
+    // openModal / boot — la momentul apelului, browser-ul încă n-a calculat
+    // layout-ul pentru elementele tocmai devenite vizibile.
+    function scheduleRefit() {
+        if (!canvas) { return; }
+        var raf = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
+        raf(function () {
+            raf(function () {
+                fitCanvasToWrap();
+            });
+        });
+    }
+
+    // ResizeObserver pe .pd-canvas-wrap. Se declanșează nu doar la window resize,
+    // ci și când sidebar-ul își schimbă lățimea, modalul își schimbă mărimea, etc.
+    var wrapObserver = null;
+    var wrapObserverTimer = null;
+    function observeWrap() {
+        if (typeof window.ResizeObserver === 'undefined') { return; }
+        var wrap = document.querySelector('.pd-canvas-wrap');
+        if (!wrap) { return; }
+        // Dispose observer vechi (poate fi pe alt nod DOM după boot()).
+        if (wrapObserver) {
+            try { wrapObserver.disconnect(); } catch (e) { /* ignore */ }
+        }
+        wrapObserver = new ResizeObserver(function () {
+            if (!canvas) { return; }
+            clearTimeout(wrapObserverTimer);
+            wrapObserverTimer = setTimeout(function () {
+                fitCanvasToWrap();
+            }, 80);
+        });
+        wrapObserver.observe(wrap);
     }
 
     function onSelection() {
@@ -469,11 +537,13 @@
     });
 
     var resizeTimer;
-    $(window).on('resize', function () {
-        if (!canvas || $modal.prop('hidden')) { return; }
+    $(window).on('resize orientationchange', function () {
+        if (!canvas) { return; }
+        // În constructor mode designer-ul e inline (modalul nu există / e gol),
+        // deci nu mai filtrăm pe $modal.hidden — fitCanvasToWrap e safe oricum.
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(function () {
-            fitCanvasToWrap(canvas.getWidth(), canvas.getHeight());
+            fitCanvasToWrap();
         }, 120);
     });
 
@@ -502,7 +572,7 @@
     });
 
     $(document).on('submit', 'form.cart', function (e) {
-        if (!$hiddenId.length) { return; }
+        if (!$hiddenId || !$hiddenId.length || !PDData) { return; }
         if ($hiddenId.val() === '') {
             e.preventDefault();
             say(PDData.i18n.empty);
@@ -514,11 +584,59 @@
     // ca să ajungă în $_POST la backend indiferent că tema folosește AJAX.
     // Triggeruit de `woocommerce.js` standard + majoritatea temelor WC.
     $(document.body).on('adding_to_cart', function (event, $button, data) {
-        var id = $hiddenId.val();
+        var id = $hiddenId && $hiddenId.length ? $hiddenId.val() : '';
         if (!id) { return; }
         data.pd_design_id   = id;
         data.pd_preview_url = $hiddenPng.val();
         data.pd_json_url    = $hiddenJson.val();
         if (window.console) { console.log('[PD] Injectat design în adding_to_cart:', data.pd_design_id); }
     });
+
+    // ==========================================================================
+    // Public API — folosit de constructor.js
+    // ==========================================================================
+    function boot(newData) {
+        if (!newData) { return; }
+        PDData = newData;
+        // Re-cache selectors (DOM-ul poate fi schimbat de constructor între mounts).
+        cacheSelectors();
+
+        // Dispose canvas anterior dacă există (schimbare produs în constructor).
+        if (canvas) {
+            try { canvas.dispose(); } catch (e) { /* ignore */ }
+            canvas = null;
+        }
+
+        // Reset state UI.
+        if ($hiddenId.length)  { $hiddenId.val(''); }
+        if ($hiddenPng.length) { $hiddenPng.val(''); }
+        if ($hiddenJson.length){ $hiddenJson.val(''); }
+        if ($selPrev.length)   { $selPrev.prop('hidden', true).find('img').attr('src', ''); }
+        if ($textCtrls.length) { $textCtrls.prop('hidden', true); }
+
+        // Inițializează canvas-ul direct dacă modalul e vizibil (caz constructor:
+        // designer-ul e inline, deja vizibil). Pe single-product așteaptă click.
+        if (canvasEl && (!$modal.length || !$modal.prop('hidden'))) {
+            initCanvas();
+            // Wrap-ul tocmai a fost (re)montat de constructor — observăm noul nod
+            // și schedule un refit după ce layout-ul se așează.
+            scheduleRefit();
+            observeWrap();
+        }
+    }
+
+    window.PDDesigner = { boot: boot };
+
+    // Constructor.js poate emite acest event când user-ul alege produs nou.
+    $(document).on('pd:mount', function (e) {
+        var detail = e.originalEvent && e.originalEvent.detail;
+        if (detail) { boot(detail); }
+    });
+
+    // Auto-boot single-product (PDData localized via wp_localize_script).
+    if (PDData) {
+        // Selectorii sunt deja cache-uiți; nu auto-init canvas — așteaptă click pe „Personalizează".
+    } else {
+        if (window.console) { console.info('[PD] PDData not localized — așteaptă pd:mount din constructor.'); }
+    }
 })(jQuery);

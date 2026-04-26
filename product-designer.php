@@ -26,6 +26,8 @@ define( 'PD_PLUGIN_URL',   plugin_dir_url( __FILE__ ) );
 define( 'PD_PLUGIN_BASE',  plugin_basename( __FILE__ ) );
 define( 'PD_REST_NS',      'product-designer/v1' );
 define( 'PD_UPLOAD_SUBDIR','product-designer' );
+define( 'PD_CONSTRUCTOR_SLUG',      'constructor' );
+define( 'PD_CONSTRUCTOR_SHORTCODE', 'pd_constructor' );
 
 require_once PD_PLUGIN_DIR . 'includes/class-autoloader.php';
 \ProductDesigner\Autoloader::register();

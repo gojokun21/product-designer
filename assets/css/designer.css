@@ -175,10 +175,19 @@
 
 .pd-canvas-wrap {
     display: flex;
-    align-items: center;
-    justify-content: center;
+    /* `safe center` previne bug-ul flexbox unde conținutul mai mare decât
+       containerul e tăiat în partea de sus / stânga și inaccesibil prin scroll
+       (flex calculează centrarea cu margin negative). Cu `safe`, browserul
+       cade înapoi la `start` când conținutul ar depăși. */
+    align-items: safe center;
+    justify-content: safe center;
     background: #2e2e2e;
     padding: 16px;
+    /* `min-height: 0` e necesar când .pd-canvas-wrap e copil de grid/flex
+       cu înălțime constrânsă — fără el, conținutul intrinsec forțează
+       wrap-ul să crească peste limita parintelui (Firefox/Chrome). */
+    min-width: 0;
+    min-height: 0;
     overflow: auto;
 }
 /* IMPORTANT: nu seta background pe TOATE canvas-urile — fabric creează un
