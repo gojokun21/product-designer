@@ -53,20 +53,37 @@ final class Product_Metabox {
                 </p>
             </div>
 
-            <div class="options_group pd-mockup-group">
+            <div class="options_group pd-mockup-group" data-side="front">
                 <p class="form-field">
-                    <label><?php esc_html_e( 'Imagine mockup', 'product-designer' ); ?></label>
-                    <span class="pd-mockup-preview">
-                        <?php if ( $config['mockup_url'] ) : ?>
-                            <img src="<?php echo esc_url( $config['mockup_url'] ); ?>" style="max-width:220px;height:auto;" alt="" />
+                    <label><?php esc_html_e( 'Mockup Față', 'product-designer' ); ?></label>
+                    <span class="pd-mockup-preview" data-side="front">
+                        <?php if ( $config['mockup_front_url'] ) : ?>
+                            <img src="<?php echo esc_url( $config['mockup_front_url'] ); ?>" style="max-width:220px;height:auto;" alt="" />
                         <?php endif; ?>
                     </span>
-                    <input type="hidden" id="pd_mockup_image_id" name="pd_mockup_image_id" value="<?php echo esc_attr( (string) $config['mockup_id'] ); ?>" />
-                    <button type="button" class="button pd-upload-mockup"><?php esc_html_e( 'Selectează imagine', 'product-designer' ); ?></button>
-                    <button type="button" class="button pd-remove-mockup" <?php disabled( (bool) $config['mockup_id'], false ); ?>><?php esc_html_e( 'Șterge', 'product-designer' ); ?></button>
+                    <input type="hidden" id="pd_mockup_image_id" name="pd_mockup_image_id" value="<?php echo esc_attr( (string) $config['mockup_front_id'] ); ?>" />
+                    <button type="button" class="button pd-upload-mockup" data-side="front"><?php esc_html_e( 'Selectează imagine', 'product-designer' ); ?></button>
+                    <button type="button" class="button pd-remove-mockup" data-side="front" <?php disabled( (bool) $config['mockup_front_id'], false ); ?>><?php esc_html_e( 'Șterge', 'product-designer' ); ?></button>
                 </p>
                 <p class="description" style="padding:0 12px;">
                     <?php esc_html_e( 'Canvas-ul editorului va avea dimensiunea nativă a acestei imagini. Textele și imaginile adăugate de client sunt returnate în coordonate raportate la pixelii mockup-ului.', 'product-designer' ); ?>
+                </p>
+            </div>
+
+            <div class="options_group pd-mockup-group" data-side="back">
+                <p class="form-field">
+                    <label><?php esc_html_e( 'Mockup Spate (opțional)', 'product-designer' ); ?></label>
+                    <span class="pd-mockup-preview" data-side="back">
+                        <?php if ( $config['mockup_back_url'] ) : ?>
+                            <img src="<?php echo esc_url( $config['mockup_back_url'] ); ?>" style="max-width:220px;height:auto;" alt="" />
+                        <?php endif; ?>
+                    </span>
+                    <input type="hidden" id="pd_mockup_back_id" name="pd_mockup_back_id" value="<?php echo esc_attr( (string) $config['mockup_back_id'] ); ?>" />
+                    <button type="button" class="button pd-upload-mockup" data-side="back"><?php esc_html_e( 'Selectează imagine', 'product-designer' ); ?></button>
+                    <button type="button" class="button pd-remove-mockup" data-side="back" <?php disabled( (bool) $config['mockup_back_id'], false ); ?>><?php esc_html_e( 'Șterge', 'product-designer' ); ?></button>
+                </p>
+                <p class="description" style="padding:0 12px;">
+                    <?php esc_html_e( 'Dacă setezi și mockup-ul de spate, clientul va putea personaliza ambele părți (apar tab-uri Față / Spate în editor).', 'product-designer' ); ?>
                 </p>
             </div>
         </div>
@@ -87,8 +104,9 @@ final class Product_Metabox {
 
         $validator = new Validator();
         $config = [
-            'enabled'   => isset( $_POST['pd_enabled'] ) && $_POST['pd_enabled'] === 'yes',
-            'mockup_id' => isset( $_POST['pd_mockup_image_id'] ) ? absint( $_POST['pd_mockup_image_id'] ) : 0,
+            'enabled'         => isset( $_POST['pd_enabled'] ) && $_POST['pd_enabled'] === 'yes',
+            'mockup_front_id' => isset( $_POST['pd_mockup_image_id'] ) ? absint( $_POST['pd_mockup_image_id'] ) : 0,
+            'mockup_back_id'  => isset( $_POST['pd_mockup_back_id'] )  ? absint( $_POST['pd_mockup_back_id'] )  : 0,
         ];
 
         $storage = new Design_Storage( new \ProductDesigner\Core\Image_Handler( $validator ) );

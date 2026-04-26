@@ -193,11 +193,17 @@ final class Rest_Constructor {
         $settings = $this->validator->settings();
         $product  = wc_get_product( $product_id );
 
-        // Override mockup per variație dacă e setat.
+        // Override mockup per variație dacă e setat — fiecare parte poate fi
+        // suprascrisă independent.
         if ( $variation_id ) {
-            $var_mockup_id = (int) get_post_meta( $variation_id, Design_Storage::META_MOCKUP, true );
-            if ( $var_mockup_id ) {
-                $config['mockup_url'] = (string) wp_get_attachment_image_url( $var_mockup_id, 'full' );
+            $var_front_id = (int) get_post_meta( $variation_id, Design_Storage::META_MOCKUP, true );
+            if ( $var_front_id ) {
+                $config['mockup_front_url'] = (string) wp_get_attachment_image_url( $var_front_id, 'full' );
+                $config['mockup_url']       = $config['mockup_front_url'];
+            }
+            $var_back_id = (int) get_post_meta( $variation_id, Design_Storage::META_MOCKUP_BACK, true );
+            if ( $var_back_id ) {
+                $config['mockup_back_url'] = (string) wp_get_attachment_image_url( $var_back_id, 'full' );
             }
         }
 
@@ -209,11 +215,13 @@ final class Rest_Constructor {
                 'designPath' => 'design',
             ],
             'product' => [
-                'id'           => $product_id,
-                'variation_id' => $variation_id,
-                'mockup_url'   => $config['mockup_url'],
-                'name'         => $product instanceof \WC_Product ? $product->get_name() : '',
-                'price_html'   => $product instanceof \WC_Product ? $product->get_price_html() : '',
+                'id'               => $product_id,
+                'variation_id'     => $variation_id,
+                'mockup_front_url' => $config['mockup_front_url'],
+                'mockup_back_url'  => $config['mockup_back_url'],
+                'mockup_url'       => $config['mockup_front_url'], // legacy alias
+                'name'             => $product instanceof \WC_Product ? $product->get_name() : '',
+                'price_html'       => $product instanceof \WC_Product ? $product->get_price_html() : '',
             ],
             'canvas' => [
                 'width'  => (int) $settings['canvas_width'],
@@ -237,6 +245,8 @@ final class Rest_Constructor {
                 'badType'     => __( 'Tip neacceptat.',    'product-designer' ),
                 'placeholder' => __( 'Textul tău aici',    'product-designer' ),
                 'empty'       => __( 'Adaugă cel puțin un element în design.', 'product-designer' ),
+                'sideFront'   => __( 'Față',               'product-designer' ),
+                'sideBack'    => __( 'Spate',              'product-designer' ),
             ],
         ], 200 );
     }
@@ -275,21 +285,25 @@ final class Rest_Constructor {
             ];
         }
 
-        // Lista de variații cu atribute + price + stock + mockup-ul (dacă există override per variație).
+        // Lista de variații cu atribute + price + stock + mockup-uri (override per variație, gol → fallback la parent).
         $variations = [];
         foreach ( $product->get_available_variations() as $v ) {
             $vid          = (int) $v['variation_id'];
             $var_obj      = wc_get_product( $vid );
-            $var_mockup_id = $var_obj instanceof \WC_Product ? (int) get_post_meta( $vid, Design_Storage::META_MOCKUP, true ) : 0;
-            $var_mockup_url = $var_mockup_id ? (string) wp_get_attachment_image_url( $var_mockup_id, 'full' ) : '';
+            $var_front_id = $var_obj instanceof \WC_Product ? (int) get_post_meta( $vid, Design_Storage::META_MOCKUP, true ) : 0;
+            $var_back_id  = $var_obj instanceof \WC_Product ? (int) get_post_meta( $vid, Design_Storage::META_MOCKUP_BACK, true ) : 0;
+            $var_front_url = $var_front_id ? (string) wp_get_attachment_image_url( $var_front_id, 'full' ) : '';
+            $var_back_url  = $var_back_id  ? (string) wp_get_attachment_image_url( $var_back_id,  'full' ) : '';
 
             $variations[] = [
-                'id'              => $vid,
-                'attributes'      => $v['attributes'] ?? [],
-                'price_html'      => $v['price_html']  ?? '',
-                'is_in_stock'     => ! empty( $v['is_in_stock'] ),
-                'is_purchasable'  => ! empty( $v['is_purchasable'] ),
-                'mockup_url'      => $var_mockup_url, // gol dacă nu e override; client folosește mockup parent
+                'id'               => $vid,
+                'attributes'       => $v['attributes'] ?? [],
+                'price_html'       => $v['price_html']  ?? '',
+                'is_in_stock'      => ! empty( $v['is_in_stock'] ),
+                'is_purchasable'   => ! empty( $v['is_purchasable'] ),
+                'mockup_front_url' => $var_front_url,
+                'mockup_back_url'  => $var_back_url,
+                'mockup_url'       => $var_front_url, // legacy alias
             ];
         }
 

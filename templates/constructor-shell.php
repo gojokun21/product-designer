@@ -83,6 +83,10 @@ if ( ! defined( 'DONOTCACHEPAGE' ) ) {
         <div class="pd-designer-layout">
             <!-- Tools sidebar (clonate din class-frontend.php) -->
             <aside class="pd-tools">
+                <div class="pd-side-tabs" role="tablist" hidden>
+                    <button type="button" class="pd-side-tab is-active" data-side="front" role="tab" aria-selected="true"><?php esc_html_e( 'Față', 'product-designer' ); ?> <span class="pd-side-tab__count" hidden>0</span></button>
+                    <button type="button" class="pd-side-tab" data-side="back" role="tab" aria-selected="false"><?php esc_html_e( 'Spate', 'product-designer' ); ?> <span class="pd-side-tab__count" hidden>0</span></button>
+                </div>
                 <button type="button" class="pd-tool pd-add-text"><?php esc_html_e( 'Adaugă text', 'product-designer' ); ?></button>
                 <label class="pd-tool pd-upload-btn">
                     <?php esc_html_e( 'Încarcă imagine', 'product-designer' ); ?>
@@ -135,7 +139,8 @@ if ( ! defined( 'DONOTCACHEPAGE' ) ) {
 
             <!-- Canvas area -->
             <div class="pd-canvas-wrap">
-                <canvas class="pd-canvas"></canvas>
+                <canvas class="pd-canvas pd-canvas--front" data-side="front"></canvas>
+                <canvas class="pd-canvas pd-canvas--back"  data-side="back" hidden></canvas>
             </div>
 
             <!-- Sidebar dreapta: produs ales + add to cart -->
@@ -155,9 +160,10 @@ if ( ! defined( 'DONOTCACHEPAGE' ) ) {
                 </div>
 
                 <!-- Hidden inputs pentru add-to-cart (folosite de constructor.js la submit) -->
-                <input type="hidden" class="pd-design-id"   value="" />
-                <input type="hidden" class="pd-preview-url" value="" />
-                <input type="hidden" class="pd-json-url"    value="" />
+                <input type="hidden" class="pd-design-id"        value="" />
+                <input type="hidden" class="pd-preview-url"      value="" />
+                <input type="hidden" class="pd-preview-back-url" value="" />
+                <input type="hidden" class="pd-json-url"         value="" />
                 <div class="pd-selected-preview" hidden>
                     <img src="" alt="" />
                     <button type="button" class="pd-clear-design"><?php esc_html_e( 'Elimină design', 'product-designer' ); ?></button>

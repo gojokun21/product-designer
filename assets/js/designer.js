@@ -1,17 +1,25 @@
 /* global jQuery, fabric */
 /**
- * Product Designer — Fabric.js frontend editor.
+ * Product Designer — Fabric.js frontend editor (Față / Spate).
  *
  * PDData shape:
  *   rest.{root,nonce,uploadPath,designPath}
- *   product.{id, mockup_url}
- *   canvas.{width,height}  (fallback când produsul n-are mockup)
+ *   product.{id, mockup_front_url, mockup_back_url}
+ *   canvas.{width,height}                  — fallback când produsul n-are mockup
  *   limits.{maxUploadMB, mimeTypes}
- *   i18n.{...}
+ *   i18n.{..., sideFront, sideBack}
  *
  * PDData provine din:
  *   - `wp_localize_script` pe single-product (auto-boot)
  *   - constructor.js care emite event `pd:mount` cu detail = PDData
+ *
+ * Architecture:
+ *   - Două instanțe Fabric.Canvas, una per parte (`front` / `back`).
+ *   - Doar una vizibilă la rândul ei; switching-ul între tab-uri e doar
+ *     toggle de vizibilitate (mockup-urile rămân încărcate).
+ *   - Tab-urile apar DOAR dacă produsul are AMBELE mockup-uri configurate.
+ *   - La save, ambele canvas-uri sunt serializate într-un singur JSON v2
+ *     `{front:{...}, back:{...}}` și fiecare parte populată produce un PNG separat.
  */
 (function ($) {
     'use strict';
@@ -31,23 +39,28 @@
     var PDData = (typeof window.PDData !== 'undefined') ? window.PDData : null;
 
     // Cap rezoluția internă a canvas-ului ca să nu explodeze RAM-ul / preview-ul
-    // PNG la mockup-uri uriașe (4K+). Coordonatele rămân raportate la canvas, deci
-    // un design salvat pe un mockup capat e identic cu unul salvat pe nativ.
+    // PNG la mockup-uri uriașe (4K+).
     var MAX_INTERNAL_DIM = 2000;
 
-    // Selectorii sunt re-cache-uiți la fiecare boot, ca să prindă DOM-ul curent
-    // (constructorul poate înlocui markup-ul când user-ul schimbă produsul).
-    var canvasEl, $modal, $status, $deleteBtn, $hiddenId, $hiddenPng, $hiddenJson, $selPrev;
+    var SIDES = ['front', 'back'];
+
+    // State per parte: instanța Fabric, dimensiunile native cap-uite.
+    var canvases = { front: null, back: null };
+    var activeSide = 'front';
+    var availableSides = ['front']; // setat la boot din PDData
+
+    // Selectorii sunt re-cache-uiți la fiecare boot.
+    var $modal, $status, $deleteBtn, $hiddenId, $hiddenPng, $hiddenPngBack, $hiddenJson, $selPrev;
     var $textCtrls, $textColor, $textSize, $textFont, $textBold, $textItalic, $textUnderline, $textAlign;
-    var canvas = null;
+    var $sideTabs;
 
     function cacheSelectors() {
-        canvasEl       = document.querySelector('.pd-canvas');
         $modal         = $('.pd-modal');
         $status        = $('.pd-status');
         $deleteBtn     = $('.pd-delete');
         $hiddenId      = $('.pd-design-id');
         $hiddenPng     = $('.pd-preview-url');
+        $hiddenPngBack = $('.pd-preview-back-url');
         $hiddenJson    = $('.pd-json-url');
         $selPrev       = $('.pd-selected-preview');
         $textCtrls     = $('.pd-text-controls');
@@ -58,6 +71,7 @@
         $textItalic    = $('.pd-text-italic');
         $textUnderline = $('.pd-text-underline');
         $textAlign     = $('.pd-text-align');
+        $sideTabs      = $('.pd-side-tabs');
     }
     cacheSelectors();
 
@@ -68,15 +82,19 @@
         catch (e) { return true; }
     }
 
+    function activeCanvas() { return canvases[activeSide]; }
+
+    // ==========================================================================
+    // Modal lifecycle
+    // ==========================================================================
+
     function openModal() {
         $modal.prop('hidden', false).attr('aria-hidden', 'false');
         document.body.style.overflow = 'hidden';
-        if (!canvas) {
-            initCanvas();
-        }
-        // Așteaptă două frame-uri ca layout-ul modalului să se așeze înainte
-        // să măsurăm wrap-ul. Fără asta, prima măsurătoare prinde wrap.clientWidth=0
-        // (modalul tocmai a devenit vizibil) → scale=1 → canvas la dim. nativă → overflow.
+        // Inițializează lazy canvas-urile la prima deschidere.
+        availableSides.forEach(function (side) {
+            if (!canvases[side]) { initCanvasForSide(side); }
+        });
         scheduleRefit();
         observeWrap();
     }
@@ -85,67 +103,86 @@
         document.body.style.overflow = '';
     }
 
-    function initCanvas() {
+    // ==========================================================================
+    // Canvas initialization (per side)
+    // ==========================================================================
+
+    function initCanvasForSide(side) {
+        var canvasEl = document.querySelector('.pd-canvas[data-side="' + side + '"]');
         if (!canvasEl) {
-            console.error('[PD] .pd-canvas element not found in DOM.');
+            console.error('[PD] Canvas element pentru "' + side + '" nu există în DOM.');
             return;
         }
-        canvas = new fabric.Canvas(canvasEl, {
+        // CRITIC: scoate `hidden` ÎNAINTE de Fabric init. Altfel Fabric păstrează
+        // atributul pe lower-canvas (unde se desenează mockup-ul) și chiar dacă
+        // ascundem/arătăm containerul ulterior, lower-canvas rămâne display:none —
+        // user-ul vede doar upper-canvas (transparent) → tab-ul pare gol.
+        canvasEl.hidden = false;
+        canvasEl.removeAttribute('hidden');
+
+        var c = new fabric.Canvas(canvasEl, {
             preserveObjectStacking: true,
             backgroundColor: '#fff',
-            // Fabric 5.x are un bug cu `cssOnly: true` + retina scaling:
-            // când canvas-ul e micșorat doar via CSS pe ecrane HiDPI
-            // (Windows 125%, retina Mac), coordonatele mouse-ului se
-            // calculează greșit cu factor DPR. Dezactivăm retina scaling
-            // ca să garantăm că click-urile pe text/imagini nimeresc corect.
+            // Fabric 5.x bug: cu cssOnly + retina pe HiDPI, click-urile nu nimeresc.
             enableRetinaScaling: false
         });
+        c.pdSide = side;
 
-        canvas.setDimensions({
+        // Vizibilitate gestionată pe `.canvas-container` (părintele creat de Fabric),
+        // NU pe lower-canvas. Se sincronizează cu `activeSide`.
+        applyContainerVisibility(side);
+
+        c.setDimensions({
             width:  PDData.canvas.width,
             height: PDData.canvas.height
         });
 
-        canvas.on('selection:created', onSelection);
-        canvas.on('selection:updated', onSelection);
-        canvas.on('selection:cleared', function () {
+        c.on('selection:created', onSelection);
+        c.on('selection:updated', onSelection);
+        c.on('selection:cleared', function () {
             $deleteBtn.prop('disabled', true);
             $textCtrls.prop('hidden', true);
         });
+        // Update tab counter când user-ul adaugă / șterge.
+        c.on('object:added',   function () { updateSideCount(side); });
+        c.on('object:removed', function () { updateSideCount(side); });
 
-        if (PDData.product.mockup_url) {
-            loadMockup(PDData.product.mockup_url);
+        canvases[side] = c;
+
+        var url = (side === 'front') ? PDData.product.mockup_front_url : PDData.product.mockup_back_url;
+        if (url) {
+            loadMockupForSide(side, url);
         } else {
-            canvas.renderAll();
+            c.renderAll();
         }
     }
 
-    function loadMockup(url) {
+    function loadMockupForSide(side, url) {
         var native = new Image();
         if (!sameOrigin(url)) { native.crossOrigin = 'anonymous'; }
 
         native.onload = function () {
+            var c = canvases[side];
+            if (!c) { return; }
             var nw = native.naturalWidth, nh = native.naturalHeight;
             if (!nw || !nh) {
-                console.error('[PD] Mockup cu dimensiuni invalide:', url);
+                console.error('[PD] Mockup ' + side + ' invalid:', url);
                 say('Mockup invalid.');
-                canvas.renderAll();
+                c.renderAll();
                 return;
             }
 
-            // Cap rezoluția internă: dacă mockup-ul depășește MAX_INTERNAL_DIM
-            // pe latura mare, micșorăm canvas-ul + scalăm imaginea în consecință.
             var cap = Math.min(MAX_INTERNAL_DIM / nw, MAX_INTERNAL_DIM / nh, 1);
             var w = Math.round(nw * cap);
             var h = Math.round(nh * cap);
 
             if (window.console) {
-                console.log('[PD] Mockup încărcat:', url,
+                console.log('[PD] Mockup ' + side + ' încărcat:', url,
                     'native ' + nw + 'x' + nh +
                     (cap < 1 ? ' → canvas redus la ' + w + 'x' + h + ' (cap ' + MAX_INTERNAL_DIM + 'px)' : ''));
             }
 
-            canvas.setDimensions({ width: w, height: h });
+            c.setDimensions({ width: w, height: h });
 
             var fImg = new fabric.Image(native, {
                 left: 0, top: 0,
@@ -157,49 +194,119 @@
                 excludeFromExport: true
             });
             fImg.pdMockup = true;
-            canvas.add(fImg);
-            canvas.sendToBack(fImg);
+            c.add(fImg);
+            c.sendToBack(fImg);
 
-            // Apelul sincron prinde uneori wrap-ul cu dimensiuni stale (browser-ul
-            // n-a re-layout-uit încă pentru noul canvas-container). Schedule un
-            // re-fit în 2 frame-uri pentru măsurătoare fiabilă. Apoi observă
-            // wrap-ul ca să prindem schimbări ulterioare (modal resize, etc).
-            fitCanvasToWrap(w, h);
-            canvas.renderAll();
-            scheduleRefit();
+            if (side === activeSide) {
+                fitCanvasToWrap(w, h);
+                scheduleRefit();
+            }
+            c.renderAll();
             observeWrap();
         };
         native.onerror = function () {
-            console.error('[PD] Eșec la încărcarea mockup-ului:', url);
+            console.error('[PD] Mockup ' + side + ' n-a putut fi încărcat:', url);
             say('Mockup nu s-a putut încărca. Verifică consola.');
-            canvas.renderAll();
+            if (canvases[side]) { canvases[side].renderAll(); }
         };
         native.src = url;
     }
 
+    // ==========================================================================
+    // Side switching
+    // ==========================================================================
+
+    /**
+     * Toggle visibility of one side's `.canvas-container` (the wrapper Fabric
+     * creates around lower-canvas + upper-canvas). NEVER touch the inner canvas
+     * `hidden` attribute — Fabric preserves it on lower-canvas and that hides
+     * the actual drawing surface.
+     */
+    function applyContainerVisibility(side) {
+        var canvasEl = document.querySelector('.pd-canvas[data-side="' + side + '"]');
+        if (!canvasEl) { return; }
+        // Defensive: if canvas was init-uit cu hidden și Fabric l-a păstrat pe
+        // lower-canvas, scoate-l acum.
+        canvasEl.hidden = false;
+        canvasEl.removeAttribute('hidden');
+
+        var container = (canvasEl.parentNode && canvasEl.parentNode.classList && canvasEl.parentNode.classList.contains('canvas-container'))
+            ? canvasEl.parentNode
+            : canvasEl;
+        container.style.display = (side === activeSide) ? '' : 'none';
+    }
+
+    function setActiveSide(side) {
+        if (SIDES.indexOf(side) === -1 || side === activeSide) { return; }
+        if (availableSides.indexOf(side) === -1) { return; }
+
+        var prev = activeSide;
+        activeSide = side;
+
+        // Curăță selecția pe canvas-ul vechi (UI controls referă obiectul activ).
+        if (canvases[prev]) {
+            canvases[prev].discardActiveObject();
+            canvases[prev].requestRenderAll();
+        }
+        $deleteBtn.prop('disabled', true);
+        $textCtrls.prop('hidden', true);
+
+        // Toggle vizibilitate pe wrapper-ele Fabric (.canvas-container).
+        SIDES.forEach(applyContainerVisibility);
+
+        // Update tab UI.
+        $sideTabs.find('.pd-side-tab').each(function () {
+            var $t = $(this);
+            var isActive = $t.attr('data-side') === activeSide;
+            $t.toggleClass('is-active', isActive).attr('aria-selected', isActive ? 'true' : 'false');
+        });
+
+        // Forțează un re-render pe canvas-ul nou activ (browser-ele uneori nu
+        // re-paint-ează lower-canvas când trece din display:none la visible).
+        if (canvases[activeSide]) {
+            canvases[activeSide].requestRenderAll();
+        }
+
+        // Refit canvas-ul nou la wrap (poate a fost ascuns când era inactiv → wrap scaling stale).
+        scheduleRefit();
+    }
+
+    function updateSideCount(side) {
+        var c = canvases[side];
+        if (!c) { return; }
+        var count = c.getObjects().filter(function (o) { return !o.excludeFromExport; }).length;
+        var $tab = $sideTabs.find('.pd-side-tab[data-side="' + side + '"]');
+        var $badge = $tab.find('.pd-side-tab__count');
+        if (count > 0) {
+            $badge.text(count).prop('hidden', false);
+        } else {
+            $badge.text('0').prop('hidden', true);
+        }
+    }
+
+    // ==========================================================================
+    // Layout / resize
+    // ==========================================================================
+
     function fitCanvasToWrap(innerW, innerH) {
         var wrap = $('.pd-canvas-wrap')[0];
-        if (!wrap || !canvas) { return; }
-        // Argumentele sunt opționale — fallback la dimensiunea internă curentă
-        // a canvas-ului. Util pentru re-fit la resize.
-        innerW = innerW || canvas.getWidth();
-        innerH = innerH || canvas.getHeight();
+        var c = activeCanvas();
+        if (!wrap || !c) { return; }
+        innerW = innerW || c.getWidth();
+        innerH = innerH || c.getHeight();
         if (!innerW || !innerH) { return; }
         var padding = 32;
         var availW = Math.max(100, wrap.clientWidth  - padding);
         var availH = Math.max(100, wrap.clientHeight - padding);
         var scale  = Math.min(availW / innerW, availH / innerH, 1);
-        canvas.setDimensions({
+        c.setDimensions({
             width:  Math.round(innerW * scale),
             height: Math.round(innerH * scale)
         }, { cssOnly: true });
     }
 
-    // Re-fit programat în următoarele 2 animation frame-uri. Necesar după
-    // openModal / boot — la momentul apelului, browser-ul încă n-a calculat
-    // layout-ul pentru elementele tocmai devenite vizibile.
     function scheduleRefit() {
-        if (!canvas) { return; }
+        if (!activeCanvas()) { return; }
         var raf = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
         raf(function () {
             raf(function () {
@@ -208,20 +315,17 @@
         });
     }
 
-    // ResizeObserver pe .pd-canvas-wrap. Se declanșează nu doar la window resize,
-    // ci și când sidebar-ul își schimbă lățimea, modalul își schimbă mărimea, etc.
     var wrapObserver = null;
     var wrapObserverTimer = null;
     function observeWrap() {
         if (typeof window.ResizeObserver === 'undefined') { return; }
         var wrap = document.querySelector('.pd-canvas-wrap');
         if (!wrap) { return; }
-        // Dispose observer vechi (poate fi pe alt nod DOM după boot()).
         if (wrapObserver) {
             try { wrapObserver.disconnect(); } catch (e) { /* ignore */ }
         }
         wrapObserver = new ResizeObserver(function () {
-            if (!canvas) { return; }
+            if (!activeCanvas()) { return; }
             clearTimeout(wrapObserverTimer);
             wrapObserverTimer = setTimeout(function () {
                 fitCanvasToWrap();
@@ -230,8 +334,14 @@
         wrapObserver.observe(wrap);
     }
 
+    // ==========================================================================
+    // Selection / text controls
+    // ==========================================================================
+
     function onSelection() {
-        var obj = canvas.getActiveObject();
+        var c = activeCanvas();
+        if (!c) { return; }
+        var obj = c.getActiveObject();
         $deleteBtn.prop('disabled', !obj);
         syncTextControls(obj);
     }
@@ -240,7 +350,6 @@
         return !!obj && (obj.type === 'i-text' || obj.type === 'text' || obj.type === 'textbox');
     }
 
-    // Populează controalele cu valorile obiectului selectat (sau ascunde-le).
     function syncTextControls(obj) {
         if (!isTextObject(obj)) {
             $textCtrls.prop('hidden', true);
@@ -256,8 +365,6 @@
         $textUnderline.toggleClass('is-active', !!obj.underline);
     }
 
-    // Input type="color" acceptă doar #rrggbb. Convertim din orice valoare
-    // internă fabric (ex. 'rgb(17,17,17)' sau nume CSS) la hex.
     function normalizeColor(value) {
         if (!value || typeof value !== 'string') { return ''; }
         if (value.charAt(0) === '#' && value.length === 7) { return value; }
@@ -273,30 +380,31 @@
     }
 
     function applyToActiveText(mutator) {
-        if (!canvas) { return; }
-        var obj = canvas.getActiveObject();
+        var c = activeCanvas();
+        if (!c) { return; }
+        var obj = c.getActiveObject();
         if (!isTextObject(obj)) { return; }
         mutator(obj);
         obj.setCoords();
-        canvas.requestRenderAll();
+        c.requestRenderAll();
     }
 
-    // Centrul canvas-ului — zonă implicită pentru poziționarea obiectelor noi.
     function defaultSpawnArea() {
-        var canvasW = canvas ? canvas.getWidth()  : 600;
-        var canvasH = canvas ? canvas.getHeight() : 700;
+        var c = activeCanvas();
+        var canvasW = c ? c.getWidth()  : 600;
+        var canvasH = c ? c.getHeight() : 700;
         var w = Math.round(canvasW * 0.6);
         var h = Math.round(canvasH * 0.6);
         return { x: Math.round((canvasW - w) / 2), y: Math.round((canvasH - h) / 2), width: w, height: h };
     }
 
-    // --- Tools ---
+    // ==========================================================================
+    // Tools — operate on active canvas
+    // ==========================================================================
 
     function addText() {
-        if (!canvas) {
-            console.warn('[PD] addText: canvas not ready yet.');
-            return;
-        }
+        var c = activeCanvas();
+        if (!c) { console.warn('[PD] addText: canvas not ready yet.'); return; }
         try {
             var a = defaultSpawnArea();
             var sizeFromCtrl = parseInt($textSize.val(), 10);
@@ -317,10 +425,10 @@
                 originX: 'left',
                 originY: 'top'
             });
-            canvas.add(t);
-            canvas.setActiveObject(t);
-            canvas.requestRenderAll();
-            if (window.console) { console.log('[PD] Text adăugat:', { left: t.left, top: t.top, fontSize: fontSize, fill: t.fill }); }
+            c.add(t);
+            c.setActiveObject(t);
+            c.requestRenderAll();
+            if (window.console) { console.log('[PD] Text adăugat (' + activeSide + '):', { left: t.left, top: t.top, fontSize: fontSize }); }
         } catch (err) {
             console.error('[PD] addText a eșuat:', err);
             say('Eroare la adăugarea textului. Verifică consola.');
@@ -328,25 +436,24 @@
     }
 
     function deleteSelected() {
-        if (!canvas) { return; }
-        var obj = canvas.getActiveObject();
+        var c = activeCanvas();
+        if (!c) { return; }
+        var obj = c.getActiveObject();
         if (!obj || obj.pdMockup) { return; }
         if (obj.type === 'activeSelection') {
             obj.forEachObject(function (o) {
-                if (!o.pdMockup) { canvas.remove(o); }
+                if (!o.pdMockup) { c.remove(o); }
             });
-            canvas.discardActiveObject();
+            c.discardActiveObject();
         } else {
-            canvas.remove(obj);
+            c.remove(obj);
         }
-        canvas.requestRenderAll();
+        c.requestRenderAll();
     }
 
     function uploadImage(file) {
-        if (!canvas) {
-            console.warn('[PD] uploadImage: canvas not ready yet.');
-            return;
-        }
+        var c = activeCanvas();
+        if (!c) { console.warn('[PD] uploadImage: canvas not ready yet.'); return; }
         if (!file) { return; }
         var maxBytes = PDData.limits.maxUploadMB * 1024 * 1024;
         if (file.size > maxBytes) { say(PDData.i18n.tooLarge); return; }
@@ -379,6 +486,8 @@
     }
 
     function addUploadedImage(url) {
+        var c = activeCanvas();
+        if (!c) { return; }
         var native = new Image();
         if (!sameOrigin(url)) { native.crossOrigin = 'anonymous'; }
 
@@ -394,9 +503,9 @@
                     originX: 'left', originY: 'top',
                     scaleX: scale, scaleY: scale
                 });
-                canvas.add(fImg);
-                canvas.setActiveObject(fImg);
-                canvas.requestRenderAll();
+                c.add(fImg);
+                c.setActiveObject(fImg);
+                c.requestRenderAll();
                 say('');
             } catch (err) {
                 console.error('[PD] addUploadedImage a eșuat:', err);
@@ -410,25 +519,41 @@
         native.src = url;
     }
 
+    // ==========================================================================
+    // Save (serializează ambele părți)
+    // ==========================================================================
+
     function saveDesign() {
-        if (!canvas) { return; }
+        var design = { version: 2, front: null, back: null };
+        var preview = { front: '', back: '' };
+        var totalObjects = 0;
 
-        var design = canvas.toJSON(['selectable', 'evented']);
-        var userObjects = (design.objects || []).filter(function (o) {
-            return !o.excludeFromExport;
+        SIDES.forEach(function (side) {
+            var c = canvases[side];
+            if (!c) { return; }
+            var sideJson = c.toJSON(['selectable', 'evented']);
+            var userObjects = (sideJson.objects || []).filter(function (o) {
+                return !o.excludeFromExport;
+            });
+            if (userObjects.length === 0) { return; }
+            sideJson.objects = userObjects;
+
+            var dataUri;
+            try {
+                dataUri = c.toDataURL({ format: 'png', multiplier: 1 });
+            } catch (err) {
+                console.error('[PD] toDataURL ' + side + ' a eșuat (canvas tainted?):', err);
+                say('Eroare generare preview ' + side + '. Verifică consola.');
+                throw err; // bubble out of forEach
+            }
+
+            design[side] = sideJson;
+            preview[side] = dataUri;
+            totalObjects += userObjects.length;
         });
-        if (userObjects.length === 0) {
-            say(PDData.i18n.empty);
-            return;
-        }
-        design.objects = userObjects;
 
-        var preview;
-        try {
-            preview = canvas.toDataURL({ format: 'png', multiplier: 1 });
-        } catch (err) {
-            console.error('[PD] toDataURL a eșuat (canvas tainted?):', err);
-            say('Eroare generare preview. Verifică consola.');
+        if (totalObjects === 0) {
+            say(PDData.i18n.empty);
             return;
         }
 
@@ -445,12 +570,18 @@
             })
         }).done(function (res) {
             $hiddenId.val(res.design_id);
-            $hiddenPng.val(res.preview_url);
+            $hiddenPng.val(res.preview_url || '');
+            $hiddenPngBack.val(res.preview_back_url || '');
             $hiddenJson.val(res.json_url);
-            $selPrev.prop('hidden', false).find('img').attr('src', res.preview_url);
+            // Preview thumbnail în UI: arată față dacă există, altfel spate.
+            var thumb = res.preview_url || res.preview_back_url || '';
+            if (thumb) {
+                $selPrev.prop('hidden', false).find('img').attr('src', thumb);
+            }
             say(PDData.i18n.savedOk);
             if (window.console) {
                 console.log('[PD] Design salvat:', res.design_id,
+                    '| front:', !!res.preview_url, '| back:', !!res.preview_back_url,
                     '| WC Session OK:', res.session_saved ? 'DA' : 'NU');
                 if (!res.session_saved) {
                     console.warn('[PD] ATENȚIE: session NU s-a salvat pe server. Cart→order va rata designul dacă tema face AJAX add-to-cart.');
@@ -464,10 +595,18 @@
         });
     }
 
-    // --- Event wiring ---
+    // ==========================================================================
+    // Event wiring
+    // ==========================================================================
+
     $(document).on('click', '.pd-open-designer',           function (e) { e.preventDefault(); openModal(); });
     $(document).on('click', '.pd-modal__close, .pd-cancel',function (e) { e.preventDefault(); closeModal(); });
     $(document).on('click', '.pd-modal__backdrop',         function () { closeModal(); });
+
+    $(document).on('click', '.pd-side-tab', function (e) {
+        e.preventDefault();
+        setActiveSide($(this).attr('data-side'));
+    });
 
     $(document).on('click', '.pd-add-text', function (e) { e.preventDefault(); addText(); });
     $(document).on('click', '.pd-delete',   function (e) { e.preventDefault(); deleteSelected(); });
@@ -480,7 +619,7 @@
 
     $(document).on('click', '.pd-clear-design', function (e) {
         e.preventDefault();
-        $hiddenId.val(''); $hiddenPng.val(''); $hiddenJson.val('');
+        $hiddenId.val(''); $hiddenPng.val(''); $hiddenPngBack.val(''); $hiddenJson.val('');
         $selPrev.prop('hidden', true).find('img').attr('src', '');
     });
 
@@ -538,9 +677,7 @@
 
     var resizeTimer;
     $(window).on('resize orientationchange', function () {
-        if (!canvas) { return; }
-        // În constructor mode designer-ul e inline (modalul nu există / e gol),
-        // deci nu mai filtrăm pe $modal.hidden — fitCanvasToWrap e safe oricum.
+        if (!activeCanvas()) { return; }
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(function () {
             fitCanvasToWrap();
@@ -548,10 +685,10 @@
     });
 
     $(document).on('keydown', function (e) {
-        if ($modal.prop('hidden')) { return; }
-        var active = canvas && canvas.getActiveObject();
+        if ($modal.length && $modal.prop('hidden')) { return; }
+        var c = activeCanvas();
+        var active = c && c.getActiveObject();
         if (e.key === 'Escape') {
-            // Dacă user-ul editează un IText, Escape iese din edit, nu închide modalul.
             if (active && active.isEditing) { return; }
             closeModal();
         }
@@ -563,8 +700,6 @@
         }
     });
 
-    // Previne submit-ul formularului add-to-cart dacă user-ul apasă Enter
-    // în timp ce editează un IText sau altceva în modal.
     $(document).on('keydown', 'form.cart', function (e) {
         if (e.key === 'Enter' && !$modal.prop('hidden')) {
             e.preventDefault();
@@ -580,46 +715,107 @@
         }
     });
 
-    // Hook pe evenimentul WC AJAX add-to-cart: injectează design_id în payload
-    // ca să ajungă în $_POST la backend indiferent că tema folosește AJAX.
-    // Triggeruit de `woocommerce.js` standard + majoritatea temelor WC.
+    // Hook pe AJAX add-to-cart: injectează design_id + ambele preview URL-uri.
     $(document.body).on('adding_to_cart', function (event, $button, data) {
         var id = $hiddenId && $hiddenId.length ? $hiddenId.val() : '';
         if (!id) { return; }
-        data.pd_design_id   = id;
-        data.pd_preview_url = $hiddenPng.val();
-        data.pd_json_url    = $hiddenJson.val();
+        data.pd_design_id        = id;
+        data.pd_preview_url      = $hiddenPng.val();
+        data.pd_preview_back_url = $hiddenPngBack.val();
+        data.pd_json_url         = $hiddenJson.val();
         if (window.console) { console.log('[PD] Injectat design în adding_to_cart:', data.pd_design_id); }
     });
 
     // ==========================================================================
     // Public API — folosit de constructor.js
     // ==========================================================================
+
+    function determineAvailableSides(data) {
+        var sides = [];
+        if (data && data.product) {
+            if (data.product.mockup_front_url) { sides.push('front'); }
+            if (data.product.mockup_back_url)  { sides.push('back'); }
+        }
+        // Fallback la legacy: dacă nici una din cele noi nu e setată dar avem mockup_url,
+        // tratează ca single front. Dacă nimic, tot front (canvas gol cu fallback dim).
+        if (sides.length === 0) {
+            if (data && data.product && data.product.mockup_url) {
+                data.product.mockup_front_url = data.product.mockup_url;
+            }
+            sides.push('front');
+        }
+        return sides;
+    }
+
+    function applySideTabsVisibility() {
+        if ($sideTabs.length) {
+            var bothSides = availableSides.length === 2;
+            $sideTabs.prop('hidden', !bothSides);
+            // Resetează count badges.
+            $sideTabs.find('.pd-side-tab__count').text('0').prop('hidden', true);
+            // Marchează tab-urile inactive ca disabled dacă acea parte lipsește.
+            $sideTabs.find('.pd-side-tab').each(function () {
+                var $t = $(this);
+                var s = $t.attr('data-side');
+                $t.prop('disabled', availableSides.indexOf(s) === -1);
+                var isActive = (s === activeSide);
+                $t.toggleClass('is-active', isActive).attr('aria-selected', isActive ? 'true' : 'false');
+            });
+        }
+        // Ascunde COMPLET canvas-urile non-disponibile (înainte de Fabric init —
+        // sigur să folosim hidden aici pentru că nu va exista canvas-container yet).
+        // Pentru cele DISPONIBILE nu setăm hidden — `initCanvasForSide` va decide
+        // vizibilitatea pe `.canvas-container` după ce Fabric wrap-uiește.
+        SIDES.forEach(function (s) {
+            var el = document.querySelector('.pd-canvas[data-side="' + s + '"]');
+            if (!el) { return; }
+            if (availableSides.indexOf(s) === -1) {
+                el.hidden = true;
+            } else {
+                el.hidden = false;
+                el.removeAttribute('hidden');
+                // Dacă Fabric a init-uit deja, sincronizează containerul.
+                if (canvases[s]) {
+                    applyContainerVisibility(s);
+                }
+            }
+        });
+    }
+
+    function disposeAllCanvases() {
+        SIDES.forEach(function (s) {
+            if (canvases[s]) {
+                try { canvases[s].dispose(); } catch (e) { /* ignore */ }
+                canvases[s] = null;
+            }
+        });
+    }
+
     function boot(newData) {
         if (!newData) { return; }
         PDData = newData;
-        // Re-cache selectors (DOM-ul poate fi schimbat de constructor între mounts).
         cacheSelectors();
 
-        // Dispose canvas anterior dacă există (schimbare produs în constructor).
-        if (canvas) {
-            try { canvas.dispose(); } catch (e) { /* ignore */ }
-            canvas = null;
-        }
+        disposeAllCanvases();
 
         // Reset state UI.
-        if ($hiddenId.length)  { $hiddenId.val(''); }
-        if ($hiddenPng.length) { $hiddenPng.val(''); }
-        if ($hiddenJson.length){ $hiddenJson.val(''); }
-        if ($selPrev.length)   { $selPrev.prop('hidden', true).find('img').attr('src', ''); }
-        if ($textCtrls.length) { $textCtrls.prop('hidden', true); }
+        if ($hiddenId.length)      { $hiddenId.val(''); }
+        if ($hiddenPng.length)     { $hiddenPng.val(''); }
+        if ($hiddenPngBack.length) { $hiddenPngBack.val(''); }
+        if ($hiddenJson.length)    { $hiddenJson.val(''); }
+        if ($selPrev.length)       { $selPrev.prop('hidden', true).find('img').attr('src', ''); }
+        if ($textCtrls.length)     { $textCtrls.prop('hidden', true); }
 
-        // Inițializează canvas-ul direct dacă modalul e vizibil (caz constructor:
-        // designer-ul e inline, deja vizibil). Pe single-product așteaptă click.
-        if (canvasEl && (!$modal.length || !$modal.prop('hidden'))) {
-            initCanvas();
-            // Wrap-ul tocmai a fost (re)montat de constructor — observăm noul nod
-            // și schedule un refit după ce layout-ul se așează.
+        availableSides = determineAvailableSides(PDData);
+        // Always default to front when available.
+        activeSide = availableSides.indexOf('front') !== -1 ? 'front' : availableSides[0];
+        applySideTabsVisibility();
+
+        // Inițializează canvas-urile direct dacă modalul e vizibil sau dacă nu există modal
+        // (caz constructor: designer-ul e inline).
+        var modalHiddenAndExists = $modal.length && $modal.prop('hidden');
+        if (!modalHiddenAndExists) {
+            availableSides.forEach(function (s) { initCanvasForSide(s); });
             scheduleRefit();
             observeWrap();
         }
@@ -635,7 +831,10 @@
 
     // Auto-boot single-product (PDData localized via wp_localize_script).
     if (PDData) {
-        // Selectorii sunt deja cache-uiți; nu auto-init canvas — așteaptă click pe „Personalizează".
+        availableSides = determineAvailableSides(PDData);
+        activeSide = availableSides.indexOf('front') !== -1 ? 'front' : availableSides[0];
+        applySideTabsVisibility();
+        // Nu inițializăm canvas — așteaptă click pe „Personalizează" (deschide modal).
     } else {
         if (window.console) { console.info('[PD] PDData not localized — așteaptă pd:mount din constructor.'); }
     }

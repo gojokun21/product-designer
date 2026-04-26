@@ -196,6 +196,62 @@
    lower-canvas via backgroundColor în `new fabric.Canvas(...)`. */
 .pd-canvas-wrap .canvas-container { background: #fff; }
 
+/* Side tabs (Față / Spate) — în sidebar-ul `.pd-tools` (fundal deschis),
+   vizibile doar dacă produsul are AMBELE mockup-uri. */
+.pd-side-tabs {
+    display: flex;
+    gap: 3px;
+    padding: 3px;
+    background: #e6e8eb;
+    border-radius: 999px;
+    margin-bottom: 4px;
+    width: 100%;
+    box-sizing: border-box;
+}
+.pd-side-tabs[hidden] { display: none; }
+.pd-side-tab {
+    flex: 1 1 0;
+    background: transparent;
+    color: #444;
+    border: none;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: 999px;
+    line-height: 1.2;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: background-color .15s ease, color .15s ease, box-shadow .15s ease;
+    text-align: center;
+}
+.pd-side-tab:hover:not([disabled]):not(.is-active) { background: rgba(0,0,0,.05); color: #111; }
+.pd-side-tab.is-active {
+    background: #fff;
+    color: #111;
+    box-shadow: 0 1px 2px rgba(0,0,0,.12);
+}
+.pd-side-tab[disabled] { opacity: .4; cursor: not-allowed; }
+.pd-side-tab__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #2272ff;
+    color: #fff;
+    border-radius: 999px;
+    line-height: 1;
+}
+.pd-side-tab.is-active .pd-side-tab__count { background: #111; color: #fff; }
+.pd-side-tab__count[hidden] { display: none; }
+
 .pd-modal__footer {
     display: flex;
     justify-content: flex-end;
@@ -323,6 +379,10 @@
         font-size: 14px;
     }
     .pd-upload-btn { display: flex; align-items: center; justify-content: center; }
+
+    /* Tab-urile Față/Spate ocupă rândul lor în sidebar-ul row-flex, în vârf. */
+    .pd-tools .pd-side-tabs { flex-basis: 100%; order: -1; margin-bottom: 0; }
+    .pd-side-tab { min-height: 40px; }
 
     /* Statusul iese din colț (margin-top:auto nu mai are sens pe row). */
     .pd-status { flex-basis: 100%; margin: 4px 0 0; }

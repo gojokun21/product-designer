@@ -396,9 +396,10 @@
             }
         }
 
-        addInput('pd_design_id',   state.designId);
-        addInput('pd_preview_url', $root.find('.pd-preview-url').val());
-        addInput('pd_json_url',    $root.find('.pd-json-url').val());
+        addInput('pd_design_id',        state.designId);
+        addInput('pd_preview_url',      $root.find('.pd-preview-url').val());
+        addInput('pd_preview_back_url', $root.find('.pd-preview-back-url').val());
+        addInput('pd_json_url',         $root.find('.pd-json-url').val());
         addInput('pd_from_constructor', '1');
 
         $form.trigger('submit');

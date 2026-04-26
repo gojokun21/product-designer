@@ -70,12 +70,18 @@ final class Order {
             return;
         }
 
-        $item->add_meta_data( Design_Storage::ITEM_META_DESIGN_ID,   $design['design_id'] );
-        $item->add_meta_data( Design_Storage::ITEM_META_PREVIEW_URL, $design['preview_url'] ?? '' );
-        $item->add_meta_data( Design_Storage::ITEM_META_JSON_URL,    $design['json_url'] ?? '' );
+        $item->add_meta_data( Design_Storage::ITEM_META_DESIGN_ID,        $design['design_id'] );
+        $item->add_meta_data( Design_Storage::ITEM_META_PREVIEW_URL,      $design['preview_url']      ?? '' );
+        $item->add_meta_data( Design_Storage::ITEM_META_PREVIEW_BACK_URL, $design['preview_back_url'] ?? '' );
+        $item->add_meta_data( Design_Storage::ITEM_META_JSON_URL,         $design['json_url']         ?? '' );
 
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-            error_log( "[Product Designer] transfer_to_order: OK — design_id {$design['design_id']} transferat pe order item." );
+            error_log( sprintf(
+                '[Product Designer] transfer_to_order: OK — design_id %s transferat pe order item (front=%s, back=%s).',
+                $design['design_id'],
+                ! empty( $design['preview_url'] )      ? 'da' : 'nu',
+                ! empty( $design['preview_back_url'] ) ? 'da' : 'nu'
+            ) );
         }
     }
 
@@ -84,6 +90,10 @@ final class Order {
             return $image;
         }
         $preview = (string) $item->get_meta( Design_Storage::ITEM_META_PREVIEW_URL, true );
+        if ( ! $preview ) {
+            // Fallback: design back-only.
+            $preview = (string) $item->get_meta( Design_Storage::ITEM_META_PREVIEW_BACK_URL, true );
+        }
         if ( ! $preview ) {
             return $image;
         }
@@ -104,14 +114,29 @@ final class Order {
         if ( ! ( $item instanceof \WC_Order_Item_Product ) ) {
             return $name;
         }
-        $preview = (string) $item->get_meta( Design_Storage::ITEM_META_PREVIEW_URL, true );
-        if ( ! $preview ) {
+        $front = (string) $item->get_meta( Design_Storage::ITEM_META_PREVIEW_URL, true );
+        $back  = (string) $item->get_meta( Design_Storage::ITEM_META_PREVIEW_BACK_URL, true );
+        if ( ! $front && ! $back ) {
             return $name;
         }
-        $img = sprintf(
-            '<img src="%s" alt="" class="pd-order-design-thumb" style="max-width:72px;height:auto;vertical-align:middle;border:1px solid #ddd;padding:2px;background:#fff;margin-right:10px;" />',
-            esc_url( $preview )
-        );
+        $thumb_style = 'max-width:72px;height:auto;vertical-align:middle;border:1px solid #ddd;padding:2px;background:#fff;margin-right:6px;';
+        $img = '';
+        if ( $front ) {
+            $img .= sprintf(
+                '<img src="%s" alt="" class="pd-order-design-thumb" title="%s" style="%s" />',
+                esc_url( $front ),
+                esc_attr__( 'Față', 'product-designer' ),
+                esc_attr( $thumb_style )
+            );
+        }
+        if ( $back ) {
+            $img .= sprintf(
+                '<img src="%s" alt="" class="pd-order-design-thumb pd-order-design-thumb--back" title="%s" style="%s" />',
+                esc_url( $back ),
+                esc_attr__( 'Spate', 'product-designer' ),
+                esc_attr( $thumb_style )
+            );
+        }
         return $img . $name;
     }
 
@@ -126,6 +151,7 @@ final class Order {
         $hidden = [
             Design_Storage::ITEM_META_DESIGN_ID,
             Design_Storage::ITEM_META_PREVIEW_URL,
+            Design_Storage::ITEM_META_PREVIEW_BACK_URL,
             Design_Storage::ITEM_META_JSON_URL,
         ];
         foreach ( $formatted as $id => $meta ) {

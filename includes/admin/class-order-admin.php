@@ -37,7 +37,8 @@ final class Order_Admin {
         $product_id         = (int) $item->get_product_id();
         $designer_enabled   = $product_id && $this->storage->is_enabled_for_product( $product_id );
         $design_id          = (string) $item->get_meta( Design_Storage::ITEM_META_DESIGN_ID, true );
-        $preview_url        = (string) $item->get_meta( Design_Storage::ITEM_META_PREVIEW_URL, true );
+        $preview_front      = (string) $item->get_meta( Design_Storage::ITEM_META_PREVIEW_URL, true );
+        $preview_back       = (string) $item->get_meta( Design_Storage::ITEM_META_PREVIEW_BACK_URL, true );
 
         // DIAGNOSTIC: produsul are designer activat, dar nu există design_id
         // pe acest item. Înseamnă că fluxul cart→order s-a rupt.
@@ -50,18 +51,76 @@ final class Order_Admin {
             return;
         }
 
-        $download_png = wp_nonce_url(
-            admin_url( 'admin-post.php?action=pd_download_design&type=png&design=' . rawurlencode( $design_id ) ),
-            'pd_download_' . $design_id
-        );
         $download_json = wp_nonce_url(
             admin_url( 'admin-post.php?action=pd_download_design&type=json&design=' . rawurlencode( $design_id ) ),
             'pd_download_' . $design_id
         );
 
-        $design  = $this->storage->get_design_json( $design_id );
-        $objects = is_array( $design ) && isset( $design['objects'] ) && is_array( $design['objects'] )
-            ? $design['objects']
+        $design = $this->storage->get_design_json( $design_id );
+        // After get_design_json() the structure is normalized to v2 shape.
+        // Legacy v1 designs come back with version=1, front=<full canvas>, back=null.
+        $front_canvas = is_array( $design ) && isset( $design['front'] ) && is_array( $design['front'] ) ? $design['front'] : null;
+        $back_canvas  = is_array( $design ) && isset( $design['back'] )  && is_array( $design['back'] )  ? $design['back']  : null;
+
+        $any_data = $front_canvas || $back_canvas || $preview_front || $preview_back;
+
+        ?>
+        <div class="pd-order-design">
+            <div class="pd-order-design__header">
+                <strong><?php esc_html_e( 'Design personalizat', 'product-designer' ); ?></strong>
+                <code class="pd-order-design__id"><?php echo esc_html( $design_id ); ?></code>
+            </div>
+
+            <p class="pd-order-links">
+                <?php if ( $preview_front ) : ?>
+                    <a class="button button-primary" href="<?php echo esc_url( $this->build_download_url( $design_id, 'png', 'front' ) ); ?>">
+                        <?php esc_html_e( 'Descarcă PNG Față', 'product-designer' ); ?>
+                    </a>
+                <?php endif; ?>
+                <?php if ( $preview_back ) : ?>
+                    <a class="button button-primary" href="<?php echo esc_url( $this->build_download_url( $design_id, 'png', 'back' ) ); ?>">
+                        <?php esc_html_e( 'Descarcă PNG Spate', 'product-designer' ); ?>
+                    </a>
+                <?php endif; ?>
+                <?php if ( ! $preview_front && ! $preview_back ) : ?>
+                    <a class="button button-primary" href="<?php echo esc_url( $this->build_download_url( $design_id, 'png', null ) ); ?>">
+                        <?php esc_html_e( 'Descarcă preview PNG', 'product-designer' ); ?>
+                    </a>
+                <?php endif; ?>
+                <a class="button" href="<?php echo esc_url( $download_json ); ?>">
+                    <?php esc_html_e( 'Descarcă JSON brut', 'product-designer' ); ?>
+                </a>
+            </p>
+
+            <?php
+            $sides_to_render = [];
+            if ( $front_canvas || $preview_front ) {
+                $sides_to_render[] = [ 'label' => __( 'Față', 'product-designer' ), 'preview' => $preview_front, 'canvas' => $front_canvas, 'side' => 'front' ];
+            }
+            if ( $back_canvas || $preview_back ) {
+                $sides_to_render[] = [ 'label' => __( 'Spate', 'product-designer' ), 'preview' => $preview_back, 'canvas' => $back_canvas, 'side' => 'back' ];
+            }
+
+            foreach ( $sides_to_render as $entry ) {
+                $this->render_side_section( $entry['label'], $entry['preview'], $entry['canvas'], $entry['side'] );
+            }
+            ?>
+
+            <?php if ( ! $any_data ) : ?>
+                <p class="pd-order-design__empty">
+                    <?php esc_html_e( 'JSON-ul design-ului nu a putut fi citit de pe disk. Este posibil să fi fost șters.', 'product-designer' ); ?>
+                </p>
+            <?php endif; ?>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render one side's section: preview image + element breakdown cards.
+     */
+    private function render_side_section( string $label, string $preview_url, ?array $canvas, string $side ) : void {
+        $objects = is_array( $canvas ) && isset( $canvas['objects'] ) && is_array( $canvas['objects'] )
+            ? $canvas['objects']
             : [];
 
         $text_objects  = [];
@@ -74,29 +133,15 @@ final class Order_Admin {
                 $image_objects[] = $obj;
             }
         }
-
         ?>
-        <div class="pd-order-design">
-            <div class="pd-order-design__header">
-                <strong><?php esc_html_e( 'Design personalizat', 'product-designer' ); ?></strong>
-                <code class="pd-order-design__id"><?php echo esc_html( $design_id ); ?></code>
-            </div>
+        <div class="pd-order-side pd-order-side--<?php echo esc_attr( $side ); ?>">
+            <h4 class="pd-order-side__label"><?php echo esc_html( $label ); ?></h4>
 
             <?php if ( $preview_url ) : ?>
                 <div class="pd-order-section pd-order-section--preview">
-                    <span class="pd-order-section__label"><?php esc_html_e( 'Preview final (mockup + design)', 'product-designer' ); ?></span>
                     <img src="<?php echo esc_url( $preview_url ); ?>" alt="" />
                 </div>
             <?php endif; ?>
-
-            <p class="pd-order-links">
-                <a class="button button-primary" href="<?php echo esc_url( $download_png ); ?>">
-                    <?php esc_html_e( 'Descarcă preview PNG', 'product-designer' ); ?>
-                </a>
-                <a class="button" href="<?php echo esc_url( $download_json ); ?>">
-                    <?php esc_html_e( 'Descarcă JSON brut', 'product-designer' ); ?>
-                </a>
-            </p>
 
             <?php if ( $text_objects ) : ?>
                 <div class="pd-order-section pd-order-section--texts">
@@ -135,14 +180,19 @@ final class Order_Admin {
                     </div>
                 </div>
             <?php endif; ?>
-
-            <?php if ( ! $objects ) : ?>
-                <p class="pd-order-design__empty">
-                    <?php esc_html_e( 'JSON-ul design-ului nu a putut fi citit de pe disk. Este posibil să fi fost șters.', 'product-designer' ); ?>
-                </p>
-            <?php endif; ?>
         </div>
         <?php
+    }
+
+    private function build_download_url( string $design_id, string $type, ?string $side ) : string {
+        $args = [ 'action' => 'pd_download_design', 'type' => $type, 'design' => $design_id ];
+        if ( $side ) {
+            $args['side'] = $side;
+        }
+        return wp_nonce_url(
+            add_query_arg( $args, admin_url( 'admin-post.php' ) ),
+            'pd_download_' . $design_id
+        );
     }
 
     private function render_text_card( array $obj, int $nr ) : void {
@@ -388,8 +438,9 @@ final class Order_Admin {
             wp_die( esc_html__( 'Permisiune insuficientă.', 'product-designer' ), '', [ 'response' => 403 ] );
         }
 
-        $design_id = isset( $_GET['design'] ) ? sanitize_text_field( wp_unslash( $_GET['design'] ) ) : '';
-        $type      = isset( $_GET['type'] )   ? sanitize_key( wp_unslash( $_GET['type'] ) )            : '';
+        $design_id = isset( $_GET['design'] )   ? sanitize_text_field( wp_unslash( $_GET['design'] ) ) : '';
+        $type      = isset( $_GET['type'] )     ? sanitize_key( wp_unslash( $_GET['type'] ) )          : '';
+        $side      = isset( $_GET['side'] )     ? sanitize_key( wp_unslash( $_GET['side'] ) )          : '';
         $nonce     = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
 
         if ( ! $design_id || ! wp_verify_nonce( $nonce, 'pd_download_' . $design_id ) ) {
@@ -398,15 +449,28 @@ final class Order_Admin {
         if ( ! in_array( $type, [ 'png', 'json' ], true ) ) {
             wp_die( esc_html__( 'Tip necunoscut.', 'product-designer' ), '', [ 'response' => 400 ] );
         }
+        if ( $side && ! in_array( $side, [ 'front', 'back' ], true ) ) {
+            wp_die( esc_html__( 'Parte necunoscută.', 'product-designer' ), '', [ 'response' => 400 ] );
+        }
 
-        $files = $this->storage->get_design_files( $design_id );
-        $file  = $files[ $type ]['path'] ?? '';
+        // PNG: side-aware lookup (legacy fallback handled inside resolve).
+        // JSON: single combined file regardless of side.
+        if ( $type === 'png' ) {
+            $resolved_side = $side ? $side : 'front';
+            $files = $this->storage->get_design_files_for_side( $design_id, $resolved_side );
+            $file  = $files['png']['path'] ?? '';
+        } else {
+            $files = $this->storage->get_design_files( $design_id );
+            $file  = $files['json']['path'] ?? '';
+        }
+
         if ( ! $file || ! is_readable( $file ) ) {
             wp_die( esc_html__( 'Fișier inexistent.', 'product-designer' ), '', [ 'response' => 404 ] );
         }
 
         $mime     = $type === 'png' ? 'image/png' : 'application/json';
-        $filename = $design_id . '.' . $type;
+        $suffix   = ( $type === 'png' && $side ) ? '-' . $side : '';
+        $filename = $design_id . $suffix . '.' . $type;
 
         nocache_headers();
         header( 'Content-Type: ' . $mime );

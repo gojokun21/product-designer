@@ -113,8 +113,12 @@ final class Image_Handler {
 
     /**
      * Persist a base64 PNG preview to /uploads/product-designer/ and return its public URL.
+     *
+     * @param string      $data_uri   data:image/png;base64,...
+     * @param string      $design_id
+     * @param string|null $side       'front' | 'back' | null (legacy: no suffix).
      */
-    public function save_preview_png( string $data_uri, string $design_id ) : array {
+    public function save_preview_png( string $data_uri, string $design_id, ?string $side = null ) : array {
         if ( strpos( $data_uri, 'data:image/png;base64,' ) !== 0 ) {
             return [ 'ok' => false, 'error' => __( 'Format preview invalid.', 'product-designer' ) ];
         }
@@ -123,7 +127,7 @@ final class Image_Handler {
             return [ 'ok' => false, 'error' => __( 'Preview PNG corupt.', 'product-designer' ) ];
         }
 
-        $paths = $this->design_paths( $design_id, 'png' );
+        $paths = $this->design_paths( $design_id, 'png', $side );
         if ( ! wp_mkdir_p( dirname( $paths['path'] ) ) ) {
             return [ 'ok' => false, 'error' => __( 'Nu s-a putut crea folderul de upload.', 'product-designer' ) ];
         }
@@ -148,14 +152,61 @@ final class Image_Handler {
         return [ 'ok' => true, 'path' => $paths['path'], 'url' => $paths['url'] ];
     }
 
-    public function design_paths( string $design_id, string $ext ) : array {
+    /**
+     * Return absolute path + public URL for a design asset on disk.
+     *
+     * @param string      $design_id
+     * @param string      $ext   'json' | 'png'
+     * @param string|null $side  'front' | 'back' | null. Suffix applied only for png with explicit side.
+     *                           For json, suffix is ignored (one combined JSON per design).
+     */
+    public function design_paths( string $design_id, string $ext, ?string $side = null ) : array {
         $uploads = wp_upload_dir();
         $safe_id = preg_replace( '/[^A-Za-z0-9_\-]/', '', $design_id );
         $dir     = trailingslashit( $uploads['basedir'] ) . PD_UPLOAD_SUBDIR;
         $url_dir = trailingslashit( $uploads['baseurl'] ) . PD_UPLOAD_SUBDIR;
+
+        $suffix = '';
+        if ( $ext === 'png' && in_array( $side, [ 'front', 'back' ], true ) ) {
+            $suffix = '-' . $side;
+        }
+
         return [
-            'path' => $dir . '/' . $safe_id . '.' . $ext,
-            'url'  => $url_dir . '/' . $safe_id . '.' . $ext,
+            'path' => $dir . '/' . $safe_id . $suffix . '.' . $ext,
+            'url'  => $url_dir . '/' . $safe_id . $suffix . '.' . $ext,
         ];
+    }
+
+    /**
+     * Locate the best available preview PNG for a design, accommodating both
+     * legacy single-side files (`pd-{id}.png`) and dual-side files
+     * (`pd-{id}-front.png` / `-back.png`). Returns paths even if the file is
+     * missing; caller decides whether to verify with is_readable().
+     *
+     * @return array{path:string,url:string,side:?string}
+     */
+    public function resolve_preview_path( string $design_id, ?string $side = null ) : array {
+        if ( $side === 'front' || $side === 'back' ) {
+            $with_suffix = $this->design_paths( $design_id, 'png', $side );
+            if ( is_readable( $with_suffix['path'] ) ) {
+                return $with_suffix + [ 'side' => $side ];
+            }
+            // Legacy fallback: a single `pd-{id}.png` may stand in for "front".
+            if ( $side === 'front' ) {
+                $legacy = $this->design_paths( $design_id, 'png', null );
+                if ( is_readable( $legacy['path'] ) ) {
+                    return $legacy + [ 'side' => null ];
+                }
+            }
+            return $with_suffix + [ 'side' => $side ];
+        }
+
+        // No side requested: prefer front-suffixed, then legacy.
+        $front  = $this->design_paths( $design_id, 'png', 'front' );
+        if ( is_readable( $front['path'] ) ) {
+            return $front + [ 'side' => 'front' ];
+        }
+        $legacy = $this->design_paths( $design_id, 'png', null );
+        return $legacy + [ 'side' => null ];
     }
 }

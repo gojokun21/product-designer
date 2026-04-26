@@ -62,19 +62,19 @@ final class Cart {
         }
 
         // 1) Calea clasică: hidden inputs din form.cart ajung în $_POST.
-        $design_id   = isset( $_POST['pd_design_id'] )   ? sanitize_text_field( wp_unslash( $_POST['pd_design_id'] ) )   : '';
-        $preview_url = isset( $_POST['pd_preview_url'] ) ? esc_url_raw( wp_unslash( $_POST['pd_preview_url'] ) )          : '';
-        $json_url    = isset( $_POST['pd_json_url'] )    ? esc_url_raw( wp_unslash( $_POST['pd_json_url'] ) )             : '';
+        $design_id        = isset( $_POST['pd_design_id'] )        ? sanitize_text_field( wp_unslash( $_POST['pd_design_id'] ) )        : '';
+        $preview_url      = isset( $_POST['pd_preview_url'] )      ? esc_url_raw( wp_unslash( $_POST['pd_preview_url'] ) )              : '';
+        $preview_back_url = isset( $_POST['pd_preview_back_url'] ) ? esc_url_raw( wp_unslash( $_POST['pd_preview_back_url'] ) )         : '';
+        $json_url         = isset( $_POST['pd_json_url'] )         ? esc_url_raw( wp_unslash( $_POST['pd_json_url'] ) )                 : '';
 
         // 2) Fallback: citește din WC Session (completat de REST la save).
-        // Robust pentru AJAX add-to-cart, Store API (blocks), și orice alt path
-        // care nu trimite hidden inputs în $_POST.
         if ( $design_id === '' && function_exists( 'WC' ) && WC()->session ) {
             $saved = WC()->session->get( 'pd_design_for_' . $product_id );
             if ( is_array( $saved ) && ! empty( $saved['design_id'] ) ) {
-                $design_id   = (string) $saved['design_id'];
-                $preview_url = (string) ( $saved['preview_url'] ?? '' );
-                $json_url    = (string) ( $saved['json_url'] ?? '' );
+                $design_id        = (string) $saved['design_id'];
+                $preview_url      = (string) ( $saved['preview_url'] ?? '' );
+                $preview_back_url = (string) ( $saved['preview_back_url'] ?? '' );
+                $json_url         = (string) ( $saved['json_url'] ?? '' );
                 $this->debug_log( "capture_design: design_id preluat din WC Session: $design_id" );
             }
         }
@@ -92,26 +92,40 @@ final class Cart {
         }
 
         // Confirm the design actually exists on disk before attaching.
+        // The PNG path returned by get_design_files() prefers front-suffixed
+        // (`pd-{id}-front.png`) and falls back to legacy (`pd-{id}.png`), so
+        // a back-only design (no front) would fail this check. We accept it as
+        // long as JSON exists AND at least one preview file is readable.
         $files = $this->storage->get_design_files( $design_id );
-        if ( ! is_readable( $files['json']['path'] ) || ! is_readable( $files['png']['path'] ) ) {
+        $front_png_path = $files['png']['path'] ?? '';
+        $back_paths     = $this->storage->get_design_files_for_side( $design_id, 'back' );
+        $back_png_path  = $back_paths['png']['path'] ?? '';
+
+        $has_any_png = ( $front_png_path && is_readable( $front_png_path ) )
+                    || ( $back_png_path  && is_readable( $back_png_path ) );
+
+        if ( ! is_readable( $files['json']['path'] ) || ! $has_any_png ) {
             $this->debug_log( sprintf(
-                'capture_design: fișiere LIPSĂ pe disk: json=%s (readable=%s), png=%s (readable=%s)',
+                'capture_design: fișiere LIPSĂ pe disk: json=%s (readable=%s), front_png=%s (readable=%s), back_png=%s (readable=%s)',
                 $files['json']['path'],
                 is_readable( $files['json']['path'] ) ? 'da' : 'nu',
-                $files['png']['path'],
-                is_readable( $files['png']['path'] ) ? 'da' : 'nu'
+                $front_png_path,
+                $front_png_path && is_readable( $front_png_path ) ? 'da' : 'nu',
+                $back_png_path,
+                $back_png_path && is_readable( $back_png_path ) ? 'da' : 'nu'
             ) );
             return $cart_item_data;
         }
 
         $cart_item_data['pd_design'] = [
-            'design_id'   => $design_id,
-            'preview_url' => $preview_url,
-            'json_url'    => $json_url,
+            'design_id'        => $design_id,
+            'preview_url'      => $preview_url,
+            'preview_back_url' => $preview_back_url,
+            'json_url'         => $json_url,
             // Unique key forces WC to treat items with different designs as separate rows.
-            'unique_key'  => md5( $design_id ),
+            'unique_key'       => md5( $design_id ),
         ];
-        $this->debug_log( "capture_design: OK — design_id $design_id atașat la cart item." );
+        $this->debug_log( "capture_design: OK — design_id $design_id atașat la cart item (front=" . ( $preview_url ? 'da' : 'nu' ) . ", back=" . ( $preview_back_url ? 'da' : 'nu' ) . ")." );
         return $cart_item_data;
     }
 
@@ -122,25 +136,38 @@ final class Cart {
     }
 
     public function display_in_cart( array $item_data, array $cart_item ) : array {
-        if ( empty( $cart_item['pd_design']['preview_url'] ) ) {
+        $front = (string) ( $cart_item['pd_design']['preview_url']      ?? '' );
+        $back  = (string) ( $cart_item['pd_design']['preview_back_url'] ?? '' );
+        if ( $front === '' && $back === '' ) {
             return $item_data;
         }
-        $preview = esc_url( $cart_item['pd_design']['preview_url'] );
+        $img_style = 'max-width:90px;height:auto;vertical-align:middle;border:1px solid #eee;padding:2px;background:#fff;margin-right:6px;';
+        $html = '';
+        if ( $front !== '' ) {
+            $html .= '<img src="' . esc_url( $front ) . '" alt="" title="' . esc_attr__( 'Față', 'product-designer' ) . '" style="' . esc_attr( $img_style ) . '" />';
+        }
+        if ( $back !== '' ) {
+            $html .= '<img src="' . esc_url( $back )  . '" alt="" title="' . esc_attr__( 'Spate', 'product-designer' ) . '" style="' . esc_attr( $img_style ) . '" />';
+        }
         $item_data[] = [
             'key'     => __( 'Design', 'product-designer' ),
-            'value'   => wp_kses_post( '<img src="' . $preview . '" alt="" style="max-width:90px;height:auto;vertical-align:middle;border:1px solid #eee;padding:2px;background:#fff;" />' ),
+            'value'   => wp_kses_post( $html ),
             'display' => '',
         ];
         return $item_data;
     }
 
     public function replace_thumbnail( string $thumbnail, array $cart_item, string $cart_item_key ) : string {
-        if ( empty( $cart_item['pd_design']['preview_url'] ) ) {
+        $front = (string) ( $cart_item['pd_design']['preview_url']      ?? '' );
+        $back  = (string) ( $cart_item['pd_design']['preview_back_url'] ?? '' );
+        // Cart thumbnail rămâne single — preferă front, fallback la back.
+        $url = $front !== '' ? $front : $back;
+        if ( $url === '' ) {
             return $thumbnail;
         }
         return sprintf(
             '<img src="%s" alt="" class="pd-cart-thumb" style="max-width:64px;height:auto;" />',
-            esc_url( $cart_item['pd_design']['preview_url'] )
+            esc_url( $url )
         );
     }
 }

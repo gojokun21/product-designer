@@ -54,7 +54,9 @@ final class Rest_Api {
             'args'                => [
                 'product_id' => [ 'required' => true, 'type' => 'integer', 'sanitize_callback' => 'absint' ],
                 'design'     => [ 'required' => true, 'type' => 'object' ],
-                'preview'    => [ 'required' => true, 'type' => 'string' ],
+                // `preview` may be a string (legacy v1) or object {front, back} (v2).
+                // No `type` constraint here — REST schema would otherwise reject one of them.
+                'preview'    => [ 'required' => true ],
             ],
         ] );
 
@@ -101,7 +103,7 @@ final class Rest_Api {
 
         $payload = [
             'design'  => $request->get_param( 'design' ),
-            'preview' => (string) $request->get_param( 'preview' ),
+            'preview' => $request->get_param( 'preview' ),
         ];
         $check = $this->validator->validate_design_payload( $payload );
         if ( empty( $check['ok'] ) ) {
@@ -131,10 +133,11 @@ final class Rest_Api {
                     WC()->session->set_customer_session_cookie( true );
                 }
                 WC()->session->set( 'pd_design_for_' . $product_id, [
-                    'design_id'   => $persisted['design_id'],
-                    'preview_url' => $persisted['preview_url'],
-                    'json_url'    => $persisted['json_url'],
-                    'saved_at'    => time(),
+                    'design_id'        => $persisted['design_id'],
+                    'preview_url'      => $persisted['preview_url'],
+                    'preview_back_url' => $persisted['preview_back_url'] ?? '',
+                    'json_url'         => $persisted['json_url'],
+                    'saved_at'         => time(),
                 ] );
                 // Save imediat în DB, nu aștepta shutdown.
                 if ( method_exists( WC()->session, 'save_data' ) ) {
@@ -146,9 +149,11 @@ final class Rest_Api {
 
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
             error_log( sprintf(
-                '[Product Designer] save_design: product=%d, design_id=%s, session_saved=%s, has_session=%s',
+                '[Product Designer] save_design: product=%d, design_id=%s, has_front=%s, has_back=%s, session_saved=%s, has_session=%s',
                 $product_id,
                 $persisted['design_id'],
+                $persisted['preview_url']      !== '' ? 'da' : 'nu',
+                ( $persisted['preview_back_url'] ?? '' ) !== '' ? 'da' : 'nu',
                 $session_saved ? 'da' : 'nu',
                 ( function_exists( 'WC' ) && WC()->session && WC()->session->has_session() ) ? 'da' : 'nu'
             ) );
@@ -157,16 +162,17 @@ final class Rest_Api {
         /**
          * Fires after a design has been persisted from the frontend editor.
          *
-         * @param array $persisted { design_id, preview_url, json_url }
+         * @param array $persisted { design_id, preview_url, preview_back_url, json_url }
          * @param int   $product_id
          */
         do_action( 'pd_design_saved', $persisted, $product_id );
 
         return new WP_REST_Response( [
-            'design_id'     => $persisted['design_id'],
-            'preview_url'   => $persisted['preview_url'],
-            'json_url'      => $persisted['json_url'],
-            'session_saved' => $session_saved,
+            'design_id'        => $persisted['design_id'],
+            'preview_url'      => $persisted['preview_url'],
+            'preview_back_url' => $persisted['preview_back_url'] ?? '',
+            'json_url'         => $persisted['json_url'],
+            'session_saved'    => $session_saved,
         ], 201 );
     }
 

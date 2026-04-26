@@ -83,8 +83,11 @@ final class Frontend {
                 'designPath'  => 'design',
             ],
             'product' => [
-                'id'         => $product_id,
-                'mockup_url' => $config['mockup_url'],
+                'id'               => $product_id,
+                'mockup_front_url' => $config['mockup_front_url'],
+                'mockup_back_url'  => $config['mockup_back_url'],
+                // Legacy alias — older theme overrides may still read this.
+                'mockup_url'       => $config['mockup_front_url'],
             ],
             'canvas' => [
                 'width'  => (int) $settings['canvas_width'],
@@ -108,6 +111,8 @@ final class Frontend {
                 'badType'     => __( 'Tip neacceptat.',    'product-designer' ),
                 'placeholder' => __( 'Textul tău aici',    'product-designer' ),
                 'empty'       => __( 'Adaugă cel puțin un element în design.', 'product-designer' ),
+                'sideFront'   => __( 'Față',               'product-designer' ),
+                'sideBack'    => __( 'Spate',              'product-designer' ),
             ],
         ] );
     }
@@ -124,9 +129,10 @@ final class Frontend {
         ?>
         <div class="pd-frontend-wrap">
             <button type="button" class="button pd-open-designer"><?php esc_html_e( 'Personalizează', 'product-designer' ); ?></button>
-            <input type="hidden" name="pd_design_id"   class="pd-design-id"   value="" />
-            <input type="hidden" name="pd_preview_url" class="pd-preview-url" value="" />
-            <input type="hidden" name="pd_json_url"    class="pd-json-url"    value="" />
+            <input type="hidden" name="pd_design_id"        class="pd-design-id"        value="" />
+            <input type="hidden" name="pd_preview_url"      class="pd-preview-url"      value="" />
+            <input type="hidden" name="pd_preview_back_url" class="pd-preview-back-url" value="" />
+            <input type="hidden" name="pd_json_url"         class="pd-json-url"         value="" />
             <div class="pd-selected-preview" hidden>
                 <img src="" alt="" />
                 <button type="button" class="pd-clear-design"><?php esc_html_e( 'Elimină design', 'product-designer' ); ?></button>
@@ -142,6 +148,10 @@ final class Frontend {
                 </header>
                 <div class="pd-modal__body">
                     <aside class="pd-tools">
+                        <div class="pd-side-tabs" role="tablist" hidden>
+                            <button type="button" class="pd-side-tab is-active" data-side="front" role="tab" aria-selected="true"><?php esc_html_e( 'Față', 'product-designer' ); ?> <span class="pd-side-tab__count" hidden>0</span></button>
+                            <button type="button" class="pd-side-tab" data-side="back" role="tab" aria-selected="false"><?php esc_html_e( 'Spate', 'product-designer' ); ?> <span class="pd-side-tab__count" hidden>0</span></button>
+                        </div>
                         <button type="button" class="pd-tool pd-add-text"><?php esc_html_e( 'Adaugă text', 'product-designer' ); ?></button>
                         <label class="pd-tool pd-upload-btn">
                             <?php esc_html_e( 'Încarcă imagine', 'product-designer' ); ?>
@@ -192,7 +202,8 @@ final class Frontend {
                         <div class="pd-status" aria-live="polite"></div>
                     </aside>
                     <div class="pd-canvas-wrap">
-                        <canvas class="pd-canvas"></canvas>
+                        <canvas class="pd-canvas pd-canvas--front" data-side="front"></canvas>
+                        <canvas class="pd-canvas pd-canvas--back"  data-side="back" hidden></canvas>
                     </div>
                 </div>
                 <footer class="pd-modal__footer">

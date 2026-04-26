@@ -193,3 +193,27 @@
 .pd-element__actions {
     margin: 4px 0 0;
 }
+
+/* Per-side sections in order admin (Față / Spate). */
+.pd-order-side {
+    margin-top: 16px;
+    padding: 12px;
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 5px;
+}
+.pd-order-side + .pd-order-side {
+    margin-top: 12px;
+}
+.pd-order-side__label {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #111;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    border-bottom: 2px solid #222;
+    padding-bottom: 6px;
+    display: inline-block;
+}
+.pd-order-side--back .pd-order-side__label { border-bottom-color: #2272ff; }
