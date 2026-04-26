@@ -345,26 +345,76 @@
     opacity: .7;
 }
 
-/* Mobile responsive */
+/* ==========================================================================
+   Mobile responsive
+   ==========================================================================
+   Strategy:
+   - ≤980px: layout single column. Order CANVAS → TOOLS → SUMMARY ca canvas-ul
+     să fie cât mai sus pe pagină (deasupra fold-ului).
+   - ≤600px: padding redus, carduri 2-col, ascunde label-urile pași.
+   - ≤420px: butoanele add-to-cart / continue full width, padding minim.
+*/
+
 @media (max-width: 980px) {
+    .pd-constructor { padding: 16px 12px 40px; }
+
     .pd-designer-layout {
         grid-template-columns: 1fr;
         gap: 12px;
+        min-height: 0; /* permite copiilor să se contracte */
+    }
+    /* CANVAS sus = "above the fold" — pe mobile ăsta e produsul. */
+    .pd-designer-layout .pd-canvas-wrap {
+        order: 1;
+        min-height: 320px;
+        max-height: 60vh;
     }
     .pd-designer-layout .pd-tools {
-        order: 1;
+        order: 2;
         flex-direction: row;
         flex-wrap: wrap;
+        gap: 8px;
+        padding: 12px;
+        max-height: none; /* tools-ul nu mai e constrâns vertical */
     }
-    .pd-designer-layout .pd-canvas-wrap { order: 2; }
     .pd-summary { order: 3; }
+
+    /* Variation picker (step 2.5): butoane mai mari pentru touch. */
+    .pd-variation-attr__options { gap: 8px; }
+    .pd-variation-option { min-height: 44px; padding: 10px 14px; font-size: 14px; }
+    .pd-continue-to-design { width: 100%; padding: 16px 24px; font-size: 16px; }
+
+    /* Add-to-cart final: full width + sticky-friendly. */
+    .pd-add-to-cart-final { width: 100%; padding: 16px 24px; font-size: 16px; }
 }
 
 @media (max-width: 600px) {
-    .pd-constructor__title { font-size: 22px; }
+    .pd-constructor { padding: 12px 10px 32px; }
+    .pd-constructor__title { font-size: 22px; margin-bottom: 12px; }
+    .pd-panel__heading { font-size: 18px; margin-bottom: 14px; }
+
+    /* Progress: doar numerele, fără label-uri (economisim spațiu). */
     .pd-progress__step .pd-progress__label { display: none; }
+    .pd-progress__step + .pd-progress__step::before { width: 16px; margin-right: 6px; }
+
+    /* Carduri 2 pe rând, mai compact. */
     .pd-cards { grid-template-columns: repeat(2, 1fr); gap: 10px; }
     .pd-card { padding: 12px 8px; }
     .pd-card__icon, .pd-card__thumb { width: 64px; height: 64px; }
-    .pd-card--product .pd-card__thumb { width: 100%; height: 120px; }
+    .pd-card--product .pd-card__thumb { width: 100%; height: 140px; object-fit: contain; }
+
+    /* Breadcrumb wrap mai curat. */
+    .pd-breadcrumb { font-size: 13px; gap: 8px; }
+    .pd-breadcrumb__back { min-height: 40px; padding: 8px 12px; }
+
+    /* Designer pe mobile foarte mic — canvas reprezintă mai puțin din viewport
+       ca să rămână loc pentru tools și summary fără scrollbar lung. */
+    .pd-designer-layout .pd-canvas-wrap { min-height: 280px; max-height: 55vh; }
+}
+
+@media (max-width: 420px) {
+    /* Smartphone foarte mic — carduri pe un singur rând pentru lizibilitate. */
+    .pd-cards { grid-template-columns: 1fr; }
+    .pd-card--product .pd-card__thumb { height: 180px; }
+    .pd-card__name { font-size: 14px; }
 }

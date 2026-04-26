@@ -280,7 +280,96 @@
     outline-offset: 2px;
 }
 
-@media (max-width: 720px) {
-    .pd-modal__body { grid-template-columns: 1fr; }
-    .pd-tools { flex-direction: row; flex-wrap: wrap; border-right: none; border-bottom: 1px solid #eee; }
+/* ==========================================================================
+   Mobile / Tablet
+   ==========================================================================
+   Strategy:
+   - Pe ecrane mici, canvas-ul e cea mai prețioasă suprafață → tools migrează
+     SUB canvas (nu deasupra), iar modalul devine full-screen.
+   - Touch targets cresc la ≥44px (Apple/Google guideline).
+   - Inputs (color, number, select) primesc padding mai mare.
+*/
+
+/* Tabletă & mai mic */
+@media (max-width: 900px) {
+    .pd-frontend-wrap { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+    .pd-open-designer { width: 100%; padding: 14px 18px; font-size: 15px; }
+
+    .pd-modal__body {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr auto;
+    }
+
+    /* Canvas SUS (mai mult spațiu vizibil), tools JOS (la îndemâna degetului). */
+    .pd-canvas-wrap { order: 1; padding: 10px; min-height: 0; }
+    .pd-tools {
+        order: 2;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 8px;
+        border-right: none;
+        border-top: 1px solid #eee;
+        max-height: 45vh;
+        overflow-y: auto;
+        padding: 12px;
+    }
+
+    /* Butoane principale: distribuție egală, touch target 44px. */
+    .pd-tool {
+        flex: 1 1 calc(50% - 4px);
+        text-align: center;
+        min-height: 44px;
+        padding: 12px 10px;
+        font-size: 14px;
+    }
+    .pd-upload-btn { display: flex; align-items: center; justify-content: center; }
+
+    /* Statusul iese din colț (margin-top:auto nu mai are sens pe row). */
+    .pd-status { flex-basis: 100%; margin: 4px 0 0; }
+
+    /* Text controls — bloc separat sub butoane, full width. */
+    .pd-text-controls {
+        flex-basis: 100%;
+        padding-top: 12px;
+        margin-top: 8px;
+    }
+    .pd-control-label input,
+    .pd-control-label select { padding: 10px 8px; font-size: 14px; min-height: 40px; }
+    .pd-control-label input[type="color"] { height: 44px; }
+    .pd-tool-small { min-width: 44px; min-height: 44px; padding: 10px 12px; font-size: 16px; }
+}
+
+/* Telefon — modal full-screen ca să maximizăm zona de design. */
+@media (max-width: 600px) {
+    .pd-modal__dialog {
+        width: 100vw;
+        max-width: 100vw;
+        max-height: 100vh;
+        height: 100vh;
+        border-radius: 0;
+    }
+    .pd-modal__header { padding: 10px 14px; }
+    .pd-modal__header h2 { font-size: 16px; }
+
+    .pd-modal__footer {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    /* Butoane footer: stretch egal, save mai proeminent. */
+    .pd-modal__footer .pd-cancel,
+    .pd-modal__footer .pd-save {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 12px 14px;
+        font-size: 14px;
+    }
+    .pd-modal__footer .pd-save { flex: 2 1 auto; } /* save mai vizibil */
+
+    /* Tools: 3 butoane principale pe rând în loc de 2 → mai compact. */
+    .pd-tool {
+        flex: 1 1 calc(33.333% - 6px);
+        font-size: 13px;
+        padding: 10px 6px;
+    }
+    .pd-tools { max-height: 50vh; padding: 10px; }
 }
