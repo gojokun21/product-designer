@@ -397,24 +397,57 @@
         innerH = innerH || c.getHeight();
         if (!innerW || !innerH) { return; }
 
-        // Folosește getBoundingClientRect() (precis sub-pixel) și citește
-        // padding-ul real din computedStyle — fix esențial când padding-ul
-        // diferă între desktop (16px) și mobile (6px). Dacă forțăm 32 hardcoded,
-        // pe mobile sub-utilizăm spațiul; mai rău, dacă padding e 0 nu mai avem
-        // marja de siguranță.
+        // getBoundingClientRect() e precis sub-pixel și reflectă layout-ul real
+        // după orice transformare CSS sau scale.
         var rect  = wrap.getBoundingClientRect();
         var style = window.getComputedStyle ? window.getComputedStyle(wrap) : null;
-        var padX  = style ? (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight)  || 0) : 32;
-        var padY  = style ? (parseFloat(style.paddingTop)  || 0) + (parseFloat(style.paddingBottom) || 0) : 32;
-        // Marjă de siguranță minimă (1px) ca să nu lipim canvas-ul de margini
-        // și să provocăm scroll horizontal pe sub-pixel rounding.
+        var padX  = style ? (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight)  || 0) : 0;
+        var padY  = style ? (parseFloat(style.paddingTop)  || 0) + (parseFloat(style.paddingBottom) || 0) : 0;
         var safety = 2;
         var availW = Math.max(50, rect.width  - padX - safety);
         var availH = Math.max(50, rect.height - padY - safety);
         var scale  = Math.min(availW / innerW, availH / innerH, 1);
         var cssW   = Math.floor(innerW * scale);
         var cssH   = Math.floor(innerH * scale);
+
+        // 1) Set prin Fabric (canonical — actualizează stările interne Fabric).
         c.setDimensions({ width: cssW, height: cssH }, { cssOnly: true });
+
+        // 2) FORCE inline styles direct pe DOM. Fabric 5.3.1 are bug pe iOS Safari
+        // unde `wrapperEl.style.width` setat din _setCssDimension nu se propagă
+        // întotdeauna înainte de painting (race cu reflow). Setarea directă
+        // garantează că CSS-ul e aplicat. Plus `max-width: 100%` ca safety net.
+        var px = function (n) { return n + 'px'; };
+        if (c.lowerCanvasEl) {
+            c.lowerCanvasEl.style.width  = px(cssW);
+            c.lowerCanvasEl.style.height = px(cssH);
+        }
+        if (c.upperCanvasEl) {
+            c.upperCanvasEl.style.width  = px(cssW);
+            c.upperCanvasEl.style.height = px(cssH);
+        }
+        if (c.wrapperEl) {
+            c.wrapperEl.style.width     = px(cssW);
+            c.wrapperEl.style.height    = px(cssH);
+            c.wrapperEl.style.maxWidth  = '100%';
+            c.wrapperEl.style.maxHeight = '100%';
+        }
+
+        // 3) Diagnostic log — TEMPORAR activat ca să vedem pe telefon ce se întâmplă.
+        // Va fi eliminat după ce confirmi că fit-ul funcționează corect.
+        // Pentru a-l dezactiva manual: setează `window.PDDebugFit = false` în console.
+        if (window.console && window.PDDebugFit !== false) {
+            console.log('[PD fit]', {
+                wrap:  rect.width.toFixed(1) + 'x' + rect.height.toFixed(1),
+                pad:   padX + 'x' + padY,
+                avail: availW.toFixed(0) + 'x' + availH.toFixed(0),
+                inner: innerW + 'x' + innerH,
+                scale: scale.toFixed(3),
+                css:   cssW + 'x' + cssH,
+                wrapperW: c.wrapperEl ? c.wrapperEl.style.width : '?',
+                wrapperH: c.wrapperEl ? c.wrapperEl.style.height : '?'
+            });
+        }
     }
 
     function scheduleRefit() {
