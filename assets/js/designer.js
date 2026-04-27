@@ -35,12 +35,27 @@
         return;
     }
 
+    // Touch-friendly defaults pe mânere selecție Fabric (executate pe prototype
+    // ÎNAINTE de orice `new fabric.Canvas` ca să se aplice la toate canvas-urile).
+    var IS_COARSE_POINTER = (typeof matchMedia === 'function') && matchMedia('(pointer: coarse)').matches;
+    fabric.Object.prototype.cornerSize         = IS_COARSE_POINTER ? 28 : 12;
+    fabric.Object.prototype.touchCornerSize    = IS_COARSE_POINTER ? 36 : 24;
+    fabric.Object.prototype.borderColor        = '#1a73e8';
+    fabric.Object.prototype.cornerColor        = '#1a73e8';
+    fabric.Object.prototype.cornerStrokeColor  = '#1a73e8';
+    fabric.Object.prototype.transparentCorners = false;
+    fabric.Object.prototype.padding            = IS_COARSE_POINTER ? 6 : 2;
+
     // PDData mutabil intern — poate fi schimbat de constructor la fiecare produs.
     var PDData = (typeof window.PDData !== 'undefined') ? window.PDData : null;
 
     // Cap rezoluția internă a canvas-ului ca să nu explodeze RAM-ul / preview-ul
     // PNG la mockup-uri uriașe (4K+).
     var MAX_INTERNAL_DIM = 2000;
+
+    // Pinch-zoom limits.
+    var ZOOM_MIN = 1;
+    var ZOOM_MAX = 4;
 
     var SIDES = ['front', 'back'];
 
@@ -84,23 +99,90 @@
 
     function activeCanvas() { return canvases[activeSide]; }
 
+    function isMobile() {
+        return (typeof matchMedia === 'function') && matchMedia('(max-width: 900px)').matches;
+    }
+
+    // ==========================================================================
+    // Viewport units fallback (--pd-vh) for iOS Safari < 15.4 / older WebViews
+    // ==========================================================================
+
+    function setVhVar() {
+        var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+        document.documentElement.style.setProperty('--pd-vh', (h * 0.01) + 'px');
+    }
+    setVhVar();
+    window.addEventListener('resize', setVhVar);
+    window.addEventListener('orientationchange', setVhVar);
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', function () {
+            setVhVar();
+            // Tastatura virtuală sau bara de adresă au schimbat înălțimea →
+            // refit canvas ca să nu apară overflow.
+            if (typeof scheduleRefit === 'function') { scheduleRefit(); }
+        });
+    }
+
+    // ==========================================================================
+    // Body scroll lock (iOS Safari-compatible)
+    // ==========================================================================
+
+    var bodyLockCount = 0;
+    function lockBodyScroll() {
+        if (bodyLockCount++ > 0) { return; }
+        var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+        document.body.dataset.pdScrollY = String(y);
+        document.body.style.position = 'fixed';
+        document.body.style.top = (-y) + 'px';
+        document.body.style.left = '0';
+        document.body.style.right = '0';
+        document.body.style.width = '100%';
+        document.body.style.overscrollBehavior = 'contain';
+    }
+    function unlockBodyScroll() {
+        if (bodyLockCount > 0) { bodyLockCount--; }
+        if (bodyLockCount > 0) { return; }
+        var y = parseInt(document.body.dataset.pdScrollY || '0', 10);
+        delete document.body.dataset.pdScrollY;
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
+        document.body.style.width = '';
+        document.body.style.overscrollBehavior = '';
+        if (y) { window.scrollTo(0, y); }
+    }
+
+    // Expose for constructor.js (Flow B locks body when entering step 3).
+    window.PDDesigner = window.PDDesigner || {};
+    window.PDDesigner.lockBodyScroll   = lockBodyScroll;
+    window.PDDesigner.unlockBodyScroll = unlockBodyScroll;
+
     // ==========================================================================
     // Modal lifecycle
     // ==========================================================================
 
     function openModal() {
         $modal.prop('hidden', false).attr('aria-hidden', 'false');
-        document.body.style.overflow = 'hidden';
+        document.documentElement.classList.add('pd-modal-open');
+        lockBodyScroll();
         // Inițializează lazy canvas-urile la prima deschidere.
         availableSides.forEach(function (side) {
             if (!canvases[side]) { initCanvasForSide(side); }
         });
         scheduleRefit();
         observeWrap();
+        updateZoomResetVisibility(activeCanvas());
     }
     function closeModal() {
+        // Închide eventualele bottom sheets deschise înainte să dispară modalul.
+        closeAllSheets();
+        // În flow constructor (Flow B) nu există $modal — saveDesign cheamă tot
+        // closeModal; nu vrem să unlock-uim body scroll-ul ținut de constructor.
+        if (!$modal.length || $modal.prop('hidden')) { return; }
         $modal.prop('hidden', true).attr('aria-hidden', 'true');
-        document.body.style.overflow = '';
+        document.documentElement.classList.remove('pd-modal-open');
+        unlockBodyScroll();
     }
 
     // ==========================================================================
@@ -127,6 +209,7 @@
             enableRetinaScaling: false
         });
         c.pdSide = side;
+        attachTouchGestures(c);
 
         // Vizibilitate gestionată pe `.canvas-container` (părintele creat de Fabric),
         // NU pe lower-canvas. Se sincronizează cu `activeSide`.
@@ -141,7 +224,25 @@
         c.on('selection:updated', onSelection);
         c.on('selection:cleared', function () {
             $deleteBtn.prop('disabled', true);
-            $textCtrls.prop('hidden', true);
+            $('.pd-bb-delete').prop('disabled', true);
+            $('.pd-bb-edit-text').prop('hidden', true);
+            $textCtrls.prop('hidden', true).removeClass('is-open');
+            // Dacă bottom-sheet-ul de text era deschis, închide-l curat.
+            if (isMobile()) { closeSheet('text'); }
+        });
+
+        // În timpul editării IText (tastatură virtuală activă), ascunde sheet-urile
+        // și bottom-bar-ul ca să nu acopere textul + să nu se suprapună cu keyboard-ul.
+        c.on('text:editing:entered', function () {
+            if (!isMobile()) { return; }
+            closeAllSheets();
+            document.documentElement.classList.add('pd-text-editing');
+        });
+        c.on('text:editing:exited', function () {
+            if (!isMobile()) { return; }
+            document.documentElement.classList.remove('pd-text-editing');
+            // Refit ca tastatura virtuală a contractat viewport-ul.
+            scheduleRefit();
         });
         // Update tab counter când user-ul adaugă / șterge.
         c.on('object:added',   function () { updateSideCount(side); });
@@ -295,23 +396,50 @@
         innerW = innerW || c.getWidth();
         innerH = innerH || c.getHeight();
         if (!innerW || !innerH) { return; }
-        var padding = 32;
-        var availW = Math.max(100, wrap.clientWidth  - padding);
-        var availH = Math.max(100, wrap.clientHeight - padding);
+
+        // Folosește getBoundingClientRect() (precis sub-pixel) și citește
+        // padding-ul real din computedStyle — fix esențial când padding-ul
+        // diferă între desktop (16px) și mobile (6px). Dacă forțăm 32 hardcoded,
+        // pe mobile sub-utilizăm spațiul; mai rău, dacă padding e 0 nu mai avem
+        // marja de siguranță.
+        var rect  = wrap.getBoundingClientRect();
+        var style = window.getComputedStyle ? window.getComputedStyle(wrap) : null;
+        var padX  = style ? (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight)  || 0) : 32;
+        var padY  = style ? (parseFloat(style.paddingTop)  || 0) + (parseFloat(style.paddingBottom) || 0) : 32;
+        // Marjă de siguranță minimă (1px) ca să nu lipim canvas-ul de margini
+        // și să provocăm scroll horizontal pe sub-pixel rounding.
+        var safety = 2;
+        var availW = Math.max(50, rect.width  - padX - safety);
+        var availH = Math.max(50, rect.height - padY - safety);
         var scale  = Math.min(availW / innerW, availH / innerH, 1);
-        c.setDimensions({
-            width:  Math.round(innerW * scale),
-            height: Math.round(innerH * scale)
-        }, { cssOnly: true });
+        var cssW   = Math.floor(innerW * scale);
+        var cssH   = Math.floor(innerH * scale);
+        c.setDimensions({ width: cssW, height: cssH }, { cssOnly: true });
     }
 
     function scheduleRefit() {
         if (!activeCanvas()) { return; }
         var raf = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
+        // Triple-pass: rAF×2 (let the browser paint), apoi setTimeout 0 ca să mai
+        // permitem layout-ul să se așeze (în special pentru bottom-bar care își
+        // ia înălțimea după primul layout pe grid auto).
         raf(function () {
             raf(function () {
                 fitCanvasToWrap();
+                setTimeout(fitCanvasToWrap, 0);
             });
+        });
+    }
+
+    // Refit "agresiv" pentru momentele când layout-ul abia se schimbă (ex. intrare
+    // step 3, schimbare orientation, visualViewport resize la deschidere tastatură).
+    // Apelează fitCanvasToWrap la intervale crescătoare ca să prindă orice settle.
+    function aggressiveRefit() {
+        if (!activeCanvas()) { return; }
+        [0, 80, 200, 400].forEach(function (ms) {
+            setTimeout(function () {
+                if (activeCanvas()) { fitCanvasToWrap(); }
+            }, ms);
         });
     }
 
@@ -335,6 +463,143 @@
     }
 
     // ==========================================================================
+    // Touch gestures: pinch-zoom + 2-finger pan + zoom-reset button
+    // ==========================================================================
+
+    function attachTouchGestures(c) {
+        if (!c || !c.upperCanvasEl) { return; }
+        var el = c.upperCanvasEl;
+        var startDist = 0, startZoom = 1, startCenter = null;
+        var startPan = null;
+
+        function dist(a, b) {
+            var dx = b.clientX - a.clientX, dy = b.clientY - a.clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+        function midpoint(a, b) {
+            var r = el.getBoundingClientRect();
+            return {
+                x: (a.clientX + b.clientX) / 2 - r.left,
+                y: (a.clientY + b.clientY) / 2 - r.top
+            };
+        }
+
+        el.addEventListener('touchstart', function (e) {
+            if (e.touches.length === 2) {
+                e.preventDefault();
+                startDist   = dist(e.touches[0], e.touches[1]);
+                startZoom   = c.getZoom();
+                startCenter = midpoint(e.touches[0], e.touches[1]);
+                startPan    = c.viewportTransform ? c.viewportTransform.slice() : null;
+                // Discard active selection ca user-ul să nu mute obiectul în loc să zoomeze.
+                c.discardActiveObject();
+                c.requestRenderAll();
+            }
+        }, { passive: false });
+
+        el.addEventListener('touchmove', function (e) {
+            if (e.touches.length !== 2 || !startDist) { return; }
+            e.preventDefault();
+            var d = dist(e.touches[0], e.touches[1]);
+            var z = startZoom * (d / startDist);
+            z = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+            c.zoomToPoint(new fabric.Point(startCenter.x, startCenter.y), z);
+            updateZoomResetVisibility(c);
+        }, { passive: false });
+
+        function endGesture(e) {
+            if (!e.touches || e.touches.length < 2) {
+                startDist = 0;
+                startCenter = null;
+                startPan = null;
+            }
+        }
+        el.addEventListener('touchend', endGesture);
+        el.addEventListener('touchcancel', endGesture);
+    }
+
+    function updateZoomResetVisibility(c) {
+        var $btn = $('.pd-zoom-reset');
+        if (!$btn.length || !c) { return; }
+        $btn.prop('hidden', c.getZoom() <= 1.05);
+    }
+
+    function resetZoom() {
+        var c = activeCanvas();
+        if (!c) { return; }
+        c.setZoom(1);
+        c.absolutePan(new fabric.Point(0, 0));
+        c.requestRenderAll();
+        updateZoomResetVisibility(c);
+    }
+
+    // ==========================================================================
+    // Bottom sheets (mobile UX) — .pd-text-controls și .pd-summary devin
+    // panouri slide-up controlate de butoanele din .pd-bottom-bar.
+    // Pe desktop (>900px) clasele `.is-open` sunt ignorate de CSS, iar
+    // [hidden] ascunde text-controls ca înainte.
+    // ==========================================================================
+
+    function openSheet(name) {
+        closeAllSheets();
+        var $target;
+        if (name === 'text') {
+            $target = $('.pd-text-controls');
+            // Pe desktop [hidden] ascunde — pe mobile clasa .is-open arată.
+            $target.removeAttr('hidden');
+        } else if (name === 'summary') {
+            $target = $('.pd-summary');
+        } else {
+            return;
+        }
+        if (!$target.length) { return; }
+        $target.addClass('is-open');
+        $('.pd-bb-btn').removeClass('is-active')
+            .filter('[data-pd-sheet="' + name + '"]').addClass('is-active');
+        document.documentElement.classList.add('pd-sheet-open');
+        scheduleRefit();
+    }
+
+    function closeSheet(name) {
+        var $target = name === 'text' ? $('.pd-text-controls')
+                    : name === 'summary' ? $('.pd-summary')
+                    : $();
+        if ($target.length) {
+            $target.removeClass('is-open');
+            // Pentru text-controls: re-aplică [hidden] doar dacă nu e text selectat
+            // (lăsăm onSelection să decidă).
+            if (name === 'text') {
+                var c = activeCanvas();
+                if (!c || !isTextObject(c.getActiveObject())) {
+                    $target.prop('hidden', true);
+                }
+            }
+        }
+        $('.pd-bb-btn[data-pd-sheet="' + name + '"]').removeClass('is-active');
+        if (!$('.pd-text-controls.is-open, .pd-summary.is-open').length) {
+            document.documentElement.classList.remove('pd-sheet-open');
+        }
+        scheduleRefit();
+    }
+
+    function closeAllSheets() {
+        $('.pd-text-controls, .pd-summary').removeClass('is-open');
+        $('.pd-bb-btn').removeClass('is-active');
+        document.documentElement.classList.remove('pd-sheet-open');
+    }
+
+    function toggleSheet(name) {
+        var $target = name === 'text' ? $('.pd-text-controls')
+                    : name === 'summary' ? $('.pd-summary')
+                    : $();
+        if ($target.hasClass('is-open')) {
+            closeSheet(name);
+        } else {
+            openSheet(name);
+        }
+    }
+
+    // ==========================================================================
     // Selection / text controls
     // ==========================================================================
 
@@ -343,7 +608,14 @@
         if (!c) { return; }
         var obj = c.getActiveObject();
         $deleteBtn.prop('disabled', !obj);
+        $('.pd-bb-delete').prop('disabled', !obj);
         syncTextControls(obj);
+
+        var isText = isTextObject(obj);
+        // Bottom-bar: arată/ascunde butonul "Editează text" când există i-text selectat.
+        // NU deschidem sheet-ul automat — strica UX-ul: user-ul vrea să mute/tasteze
+        // în text, nu să formateze. Dacă vrea formatare, apasă explicit "Editează".
+        $('.pd-bb-edit-text').prop('hidden', !isText);
     }
 
     function isTextObject(obj) {
@@ -587,7 +859,13 @@
                     console.warn('[PD] ATENȚIE: session NU s-a salvat pe server. Cart→order va rata designul dacă tema face AJAX add-to-cart.');
                 }
             }
-            setTimeout(closeModal, 500);
+            // Pe mobile, în flow constructor (fără modal), deschide automat summary
+            // sheet ca user-ul să vadă butonul "Adaugă în coș".
+            if (isMobile() && (!$modal.length || $modal.prop('hidden')) && $('.pd-summary').length) {
+                setTimeout(function () { openSheet('summary'); }, 300);
+            } else {
+                setTimeout(closeModal, 500);
+            }
         }).fail(function (xhr) {
             var msg = (xhr.responseJSON && xhr.responseJSON.message) || ('HTTP ' + xhr.status);
             console.error('[PD] Salvarea a eșuat:', msg, xhr);
@@ -611,6 +889,52 @@
     $(document).on('click', '.pd-add-text', function (e) { e.preventDefault(); addText(); });
     $(document).on('click', '.pd-delete',   function (e) { e.preventDefault(); deleteSelected(); });
     $(document).on('click', '.pd-save',     function (e) { e.preventDefault(); saveDesign(); });
+
+    // ---- Bottom-bar (mobile UX) ----
+    $(document).on('click', '.pd-bb-add-text',  function (e) { e.preventDefault(); addText(); });
+    $(document).on('click', '.pd-bb-add-image', function (e) {
+        e.preventDefault();
+        // Triggerează file picker-ul existent.
+        $('.pd-upload-input').first().trigger('click');
+    });
+    $(document).on('click', '.pd-bb-delete', function (e) {
+        e.preventDefault();
+        if ($(this).prop('disabled')) { return; }
+        deleteSelected();
+    });
+    $(document).on('click', '.pd-bb-edit-text', function (e) {
+        e.preventDefault();
+        toggleSheet('text');
+    });
+    $(document).on('click', '.pd-bb-summary', function (e) {
+        e.preventDefault();
+        toggleSheet('summary');
+    });
+    $(document).on('click', '.pd-bb-toggle-side', function (e) {
+        e.preventDefault();
+        if (availableSides.length < 2) { return; }
+        var next = activeSide === 'front' ? 'back' : 'front';
+        setActiveSide(next);
+        // Update label-ul butonului.
+        var $btn = $(this);
+        var nextLabel = activeSide === 'front'
+            ? (PDData && PDData.i18n && PDData.i18n.sideBack)  || 'Spate'
+            : (PDData && PDData.i18n && PDData.i18n.sideFront) || 'Față';
+        $btn.find('.pd-bb-btn__label').text(nextLabel);
+    });
+
+    // Click pe canvas-wrap (în zona de deasupra sheet-ului) închide summary sheet-ul.
+    // Pentru text sheet, selection:cleared îl închide automat la deselect.
+    $(document).on('click', '.pd-canvas-wrap', function (e) {
+        // Doar dacă click-ul e direct pe wrap (nu prin canvas/copii Fabric).
+        if (e.target !== this) { return; }
+        if ($('.pd-summary.is-open').length) { closeSheet('summary'); }
+    });
+
+    $(document).on('click', '.pd-zoom-reset', function (e) {
+        e.preventDefault();
+        resetZoom();
+    });
 
     $(document).on('change', '.pd-upload-input', function () {
         uploadImage(this.files && this.files[0]);
@@ -677,10 +1001,12 @@
 
     var resizeTimer;
     $(window).on('resize orientationchange', function () {
+        setVhVar();
         if (!activeCanvas()) { return; }
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(function () {
             fitCanvasToWrap();
+            updateZoomResetVisibility(activeCanvas());
         }, 120);
     });
 
@@ -748,8 +1074,8 @@
     }
 
     function applySideTabsVisibility() {
+        var bothSides = availableSides.length === 2;
         if ($sideTabs.length) {
-            var bothSides = availableSides.length === 2;
             $sideTabs.prop('hidden', !bothSides);
             // Resetează count badges.
             $sideTabs.find('.pd-side-tab__count').text('0').prop('hidden', true);
@@ -761,6 +1087,15 @@
                 var isActive = (s === activeSide);
                 $t.toggleClass('is-active', isActive).attr('aria-selected', isActive ? 'true' : 'false');
             });
+        }
+        // Bottom-bar toggle-side button: arată-l doar dacă produsul are ambele părți.
+        var $bbSide = $('.pd-bb-toggle-side');
+        if ($bbSide.length) {
+            $bbSide.prop('hidden', !bothSides);
+            var nextLabel = activeSide === 'front'
+                ? (PDData && PDData.i18n && PDData.i18n.sideBack)  || 'Spate'
+                : (PDData && PDData.i18n && PDData.i18n.sideFront) || 'Față';
+            $bbSide.find('.pd-bb-btn__label').text(nextLabel);
         }
         // Ascunde COMPLET canvas-urile non-disponibile (înainte de Fabric init —
         // sigur să folosim hidden aici pentru că nu va exista canvas-container yet).
@@ -804,24 +1139,39 @@
         if ($hiddenPngBack.length) { $hiddenPngBack.val(''); }
         if ($hiddenJson.length)    { $hiddenJson.val(''); }
         if ($selPrev.length)       { $selPrev.prop('hidden', true).find('img').attr('src', ''); }
-        if ($textCtrls.length)     { $textCtrls.prop('hidden', true); }
+        if ($textCtrls.length)     { $textCtrls.prop('hidden', true).removeClass('is-open'); }
+        closeAllSheets();
+        $('.pd-bb-edit-text').prop('hidden', true);
+        $('.pd-bb-delete').prop('disabled', true);
+        $('.pd-zoom-reset').prop('hidden', true);
 
         availableSides = determineAvailableSides(PDData);
         // Always default to front when available.
         activeSide = availableSides.indexOf('front') !== -1 ? 'front' : availableSides[0];
         applySideTabsVisibility();
 
+        // Bottom-bar e vizibilă pe mobile când suntem fie în modal deschis, fie
+        // în constructor step 3. CSS-ul gestionează vizibilitatea — aici doar
+        // ne asigurăm că nu e [hidden] din PHP-ul inițial.
+        $('.pd-bottom-bar').prop('hidden', false);
+
         // Inițializează canvas-urile direct dacă modalul e vizibil sau dacă nu există modal
         // (caz constructor: designer-ul e inline).
         var modalHiddenAndExists = $modal.length && $modal.prop('hidden');
         if (!modalHiddenAndExists) {
             availableSides.forEach(function (s) { initCanvasForSide(s); });
+            // În flow constructor, layout-ul se așază în timp ce mockup-ul se descarcă.
+            // aggressiveRefit lansează 4 fit-uri eșalonate (0/80/200/400ms) ca să
+            // prindă orice schimbare de înălțime a bottom-bar-ului / step3-bar-ului.
+            aggressiveRefit();
             scheduleRefit();
             observeWrap();
         }
     }
 
-    window.PDDesigner = { boot: boot };
+    window.PDDesigner = window.PDDesigner || {};
+    window.PDDesigner.boot = boot;
+    window.PDDesigner.closeAllSheets = closeAllSheets;
 
     // Constructor.js poate emite acest event când user-ul alege produs nou.
     $(document).on('pd:mount', function (e) {

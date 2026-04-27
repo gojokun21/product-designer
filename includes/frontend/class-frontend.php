@@ -145,6 +145,7 @@ final class Frontend {
                 <header class="pd-modal__header">
                     <h2><?php esc_html_e( 'Editor design', 'product-designer' ); ?></h2>
                     <button type="button" class="pd-modal__close" aria-label="<?php esc_attr_e( 'Închide', 'product-designer' ); ?>">&times;</button>
+                    <button type="button" class="pd-modal__save-top pd-save"><?php esc_html_e( 'Salvează', 'product-designer' ); ?></button>
                 </header>
                 <div class="pd-modal__body">
                     <aside class="pd-tools">
@@ -204,7 +205,38 @@ final class Frontend {
                     <div class="pd-canvas-wrap">
                         <canvas class="pd-canvas pd-canvas--front" data-side="front"></canvas>
                         <canvas class="pd-canvas pd-canvas--back"  data-side="back" hidden></canvas>
+                        <button type="button" class="pd-zoom-reset" hidden aria-label="<?php esc_attr_e( 'Resetează zoom', 'product-designer' ); ?>" title="<?php esc_attr_e( 'Resetează zoom', 'product-designer' ); ?>">&#x2296;</button>
                     </div>
+
+                    <!-- Bottom-bar — apare DOAR pe mobile (≤900px) via CSS. -->
+                    <nav class="pd-bottom-bar" role="toolbar" aria-label="<?php esc_attr_e( 'Editor — acțiuni', 'product-designer' ); ?>">
+                        <button type="button" class="pd-bb-btn pd-bb-add-text" data-pd-action="add-text">
+                            <span class="pd-bb-btn__icon" aria-hidden="true">A+</span>
+                            <span class="pd-bb-btn__label"><?php esc_html_e( 'Text', 'product-designer' ); ?></span>
+                        </button>
+                        <button type="button" class="pd-bb-btn pd-bb-add-image" data-pd-action="add-image">
+                            <span class="pd-bb-btn__icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5" fill="currentColor" stroke="none"/><path d="m21 16-5-5-9 9"/></svg>
+                            </span>
+                            <span class="pd-bb-btn__label"><?php esc_html_e( 'Imagine', 'product-designer' ); ?></span>
+                        </button>
+                        <button type="button" class="pd-bb-btn pd-bb-delete" data-pd-action="delete" disabled>
+                            <span class="pd-bb-btn__icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+                            </span>
+                            <span class="pd-bb-btn__label"><?php esc_html_e( 'Șterge', 'product-designer' ); ?></span>
+                        </button>
+                        <button type="button" class="pd-bb-btn pd-bb-edit-text" data-pd-sheet="text" hidden>
+                            <span class="pd-bb-btn__icon" aria-hidden="true">Aa</span>
+                            <span class="pd-bb-btn__label"><?php esc_html_e( 'Editează', 'product-designer' ); ?></span>
+                        </button>
+                        <button type="button" class="pd-bb-btn pd-bb-toggle-side" hidden>
+                            <span class="pd-bb-btn__icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24"><path d="M7 7l-3 3 3 3M17 17l3-3-3-3M4 10h12M20 14H8"/></svg>
+                            </span>
+                            <span class="pd-bb-btn__label"><?php esc_html_e( 'Spate', 'product-designer' ); ?></span>
+                        </button>
+                    </nav>
                 </div>
                 <footer class="pd-modal__footer">
                     <button type="button" class="button pd-cancel"><?php esc_html_e( 'Anulează', 'product-designer' ); ?></button>

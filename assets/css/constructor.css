@@ -267,9 +267,22 @@
     min-height: 480px;
     /* Cap înălțimea ca mockup-uri mari să se încadreze în viewport
        — fitCanvasToWrap (designer.js) scalează atunci canvas-ul prin CSS
-       pentru a respecta atât lățimea cât și înălțimea disponibilă. */
-    max-height: calc(100vh - 180px);
+       pentru a respecta atât lățimea cât și înălțimea disponibilă.
+       Pe desktop folosim dvh (sau --pd-vh fallback) ca să respectăm
+       browser chrome-ul corect. */
+    max-height: calc(var(--pd-vh, 1vh) * 100 - 180px);
 }
+@supports (max-height: 100dvh) {
+    .pd-designer-layout .pd-canvas-wrap {
+        max-height: calc(100dvh - 180px);
+    }
+}
+
+/* ==========================================================================
+   Slim sticky bar pentru pasul 3 pe mobile
+   (înlocuiește header-ul mare + breadcrumb-ul)
+   ========================================================================== */
+.pd-step3-bar { display: none; }
 
 /* Summary sidebar */
 .pd-summary {
@@ -346,75 +359,164 @@
 }
 
 /* ==========================================================================
-   Mobile responsive
-   ==========================================================================
-   Strategy:
-   - ≤980px: layout single column. Order CANVAS → TOOLS → SUMMARY ca canvas-ul
-     să fie cât mai sus pe pagină (deasupra fold-ului).
-   - ≤600px: padding redus, carduri 2-col, ascunde label-urile pași.
-   - ≤420px: butoanele add-to-cart / continue full width, padding minim.
+   Mobile responsive — strategy:
+   - ≤900px: pasul 3 devine app full-screen (fixed inset:0, dvh).
+     Layout grid: top-bar / canvas (1fr) / bottom-bar.
+     Sidebar-ul `.pd-tools` se dizolvă (display:contents) — controalele apar
+     în .pd-bottom-bar și .pd-text-controls/.pd-summary devin bottom-sheets.
+   - ≤980px: pașii 1, 2, 2.5 (selecție categorie/produs) păstrează layout
+     vertical normal cu padding redus.
+   - ≤600px: titlul ascuns, progress compact, carduri auto-fill.
 */
 
 @media (max-width: 980px) {
     .pd-constructor { padding: 16px 12px 40px; }
 
-    .pd-designer-layout {
-        grid-template-columns: 1fr;
-        gap: 12px;
-        min-height: 0; /* permite copiilor să se contracte */
-    }
-    /* CANVAS sus = "above the fold" — pe mobile ăsta e produsul. */
-    .pd-designer-layout .pd-canvas-wrap {
-        order: 1;
-        min-height: 320px;
-        max-height: 60vh;
-    }
-    .pd-designer-layout .pd-tools {
-        order: 2;
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 8px;
-        padding: 12px;
-        max-height: none; /* tools-ul nu mai e constrâns vertical */
-    }
-    .pd-summary { order: 3; }
-
-    /* Variation picker (step 2.5): butoane mai mari pentru touch. */
+    /* Pașii 1, 2, 2.5 — layout normal cu spacing redus. */
     .pd-variation-attr__options { gap: 8px; }
     .pd-variation-option { min-height: 44px; padding: 10px 14px; font-size: 14px; }
     .pd-continue-to-design { width: 100%; padding: 16px 24px; font-size: 16px; }
+    .pd-add-to-cart-final { width: 100%; padding: 16px 24px; font-size: 16px; min-height: 52px; }
+}
 
-    /* Add-to-cart final: full width + sticky-friendly. */
-    .pd-add-to-cart-final { width: 100%; padding: 16px 24px; font-size: 16px; }
+/* Pasul 3 (designer) pe mobile — full-screen app cu canvas care fitează viewport-ul. */
+@media (max-width: 900px) {
+    /* Constructor în pasul 3: fixed full-screen ca să avem control complet
+       asupra layout-ului (grid: header / canvas / bottom-bar). */
+    .pd-constructor[data-step="3"] {
+        position: fixed;
+        inset: 0;
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        height: calc(var(--pd-vh) * 100);
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        overflow: hidden;
+        z-index: 10000;
+        background: #fff;
+    }
+    @supports (height: 100dvh) {
+        .pd-constructor[data-step="3"] { height: 100dvh; }
+    }
+    /* Header mare + breadcrumb originale ascunse pe mobile la pasul 3. */
+    .pd-constructor[data-step="3"] .pd-constructor__header,
+    .pd-constructor[data-step="3"] .pd-constructor__panel[data-panel="3"] .pd-breadcrumb {
+        display: none;
+    }
+    /* Show slim top bar. */
+    .pd-constructor[data-step="3"] .pd-step3-bar {
+        display: flex;
+        grid-row: 1;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        padding-top: max(6px, env(safe-area-inset-top));
+        background: #fff;
+        border-bottom: 1px solid #eee;
+        z-index: 60;
+    }
+    .pd-step3-bar__back {
+        background: none;
+        border: 0;
+        font-size: 22px;
+        line-height: 1;
+        padding: 0;
+        min-width: 44px;
+        min-height: 44px;
+        cursor: pointer;
+        color: #222;
+        font-family: inherit;
+        border-radius: 8px;
+    }
+    .pd-step3-bar__back:active { background: #f0f3f7; }
+    .pd-step3-bar__title {
+        flex: 1;
+        font-size: 14px;
+        font-weight: 600;
+        color: #111;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-align: center;
+        margin: 0 4px;
+    }
+    .pd-step3-bar__save {
+        background: #1a73e8;
+        color: #fff;
+        border: 0;
+        padding: 10px 14px;
+        font-size: 13px;
+        font-weight: 600;
+        border-radius: 8px;
+        cursor: pointer;
+        min-height: 40px;
+        font-family: inherit;
+        white-space: nowrap;
+    }
+    .pd-step3-bar__save:active { background: #1557b0; }
+
+    /* Active panel (3) ocupă restul prin grid contents. */
+    .pd-constructor[data-step="3"] .pd-constructor__panel[data-panel="3"] {
+        display: contents;
+        animation: none;
+    }
+    .pd-designer-layout {
+        display: contents;
+    }
+    .pd-designer-layout .pd-canvas-wrap {
+        grid-row: 2;
+        order: 1;
+        border: 0;
+        border-radius: 0;
+        min-height: 0;
+        min-width: 0;
+        max-height: none;
+        padding: 4px;
+        background: #2e2e2e;
+        position: relative;
+        touch-action: none;
+        overflow: hidden; /* clip orice surplus pe sub-pixel rounding */
+    }
+
+    /* Canvas wrap pe mobile — desktop max-height removed (covered by grid 1fr). */
+    @supports (height: 100dvh) {
+        .pd-designer-layout .pd-canvas-wrap { max-height: none; }
+    }
+
+    /* Bottom-bar din designer.css pe rândul 3. */
+    .pd-constructor[data-step="3"] .pd-bottom-bar { grid-row: 3; order: 2; }
 }
 
 @media (max-width: 600px) {
     .pd-constructor { padding: 12px 10px 32px; }
-    .pd-constructor__title { font-size: 22px; margin-bottom: 12px; }
     .pd-panel__heading { font-size: 18px; margin-bottom: 14px; }
 
-    /* Progress: doar numerele, fără label-uri (economisim spațiu). */
-    .pd-progress__step .pd-progress__label { display: none; }
-    .pd-progress__step + .pd-progress__step::before { width: 16px; margin-right: 6px; }
+    /* Pe mobile la pașii 1/2/2.5 ascundem H1 mare. */
+    .pd-constructor:not([data-step="3"]) .pd-constructor__title {
+        font-size: 18px;
+        margin-bottom: 10px;
+    }
 
-    /* Carduri 2 pe rând, mai compact. */
-    .pd-cards { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-    .pd-card { padding: 12px 8px; }
-    .pd-card__icon, .pd-card__thumb { width: 64px; height: 64px; }
-    .pd-card--product .pd-card__thumb { width: 100%; height: 140px; object-fit: contain; }
+    /* Progress: număr + label doar pentru pasul activ; conectorii micșorați. */
+    .pd-progress { gap: 6px; }
+    .pd-progress__step { font-size: 0; gap: 6px; }
+    .pd-progress__step.is-active { font-size: 13px; }
+    .pd-progress__step.is-active .pd-progress__label { display: inline; }
+    .pd-progress__step:not(.is-active) .pd-progress__label { display: none; }
+    .pd-progress__num { width: 24px; height: 24px; font-size: 12px; }
+    .pd-progress__step + .pd-progress__step::before { width: 14px; margin-right: 6px; }
 
-    /* Breadcrumb wrap mai curat. */
+    /* Carduri auto-fill: 2 col natural pe 375px, 1 col pe 320px. */
+    .pd-cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+    .pd-cards--products { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    .pd-card { padding: 10px 8px; min-height: 48px; }
+    .pd-card__icon, .pd-card__thumb { width: 56px; height: 56px; }
+    .pd-card--product .pd-card__thumb { width: 100%; height: 120px; object-fit: contain; }
+    .pd-card__name { font-size: 13px; line-height: 1.25; }
+    .pd-card__meta, .pd-card__price { font-size: 12px; }
+
+    /* Breadcrumb wrap mai curat (folosit la pașii 2 și 2.5). */
     .pd-breadcrumb { font-size: 13px; gap: 8px; }
-    .pd-breadcrumb__back { min-height: 40px; padding: 8px 12px; }
-
-    /* Designer pe mobile foarte mic — canvas reprezintă mai puțin din viewport
-       ca să rămână loc pentru tools și summary fără scrollbar lung. */
-    .pd-designer-layout .pd-canvas-wrap { min-height: 280px; max-height: 55vh; }
-}
-
-@media (max-width: 420px) {
-    /* Smartphone foarte mic — carduri pe un singur rând pentru lizibilitate. */
-    .pd-cards { grid-template-columns: 1fr; }
-    .pd-card--product .pd-card__thumb { height: 180px; }
-    .pd-card__name { font-size: 14px; }
+    .pd-breadcrumb__back { min-height: 44px; padding: 10px 14px; }
 }

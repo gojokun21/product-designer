@@ -52,6 +52,7 @@
     // ---------- State helpers ----------
 
     function setStep(n) {
+        var prevStep = $root.attr('data-step');
         // n poate fi 1, 2, 2.5 (variation picker), 3.
         $root.attr('data-step', String(n));
         $panels.each(function () {
@@ -67,8 +68,26 @@
             step.toggleClass('is-active', target === progressN);
             step.toggleClass('is-done', target < progressN);
         });
-        // Scroll into view smooth pe mobile.
-        if (window.innerWidth < 720) {
+
+        // Body scroll lock: pasul 3 pe mobile devine app full-screen → blochează
+        // scroll-ul de pagină ca să nu existe "scroll bouncing" în spatele canvas-ului.
+        var isStep3 = (String(n) === '3');
+        var wasStep3 = (String(prevStep) === '3');
+        var locker = window.PDDesigner || {};
+        if (isStep3 && !wasStep3) {
+            // Setează data-pd-back-to-step pe butonul step3-bar la pasul corect
+            // (2.5 pentru produse variabile, 2 pentru simple).
+            var backTarget = state.productVariable ? '2.5' : '2';
+            $root.find('.pd-step3-bar__back').attr('data-pd-back-to-step', backTarget);
+            if (typeof locker.lockBodyScroll === 'function') { locker.lockBodyScroll(); }
+        }
+        if (!isStep3 && wasStep3) {
+            if (typeof locker.closeAllSheets === 'function') { locker.closeAllSheets(); }
+            if (typeof locker.unlockBodyScroll === 'function') { locker.unlockBodyScroll(); }
+        }
+
+        // Scroll into view smooth pe mobile (doar pentru pașii 1, 2, 2.5).
+        if (!isStep3 && window.innerWidth < 720) {
             $root[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }
