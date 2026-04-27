@@ -90,10 +90,19 @@
 .pd-modal__body {
     display: grid;
     grid-template-columns: 220px 1fr;
+    /* grid-template-rows EXPLICIT (1fr) — fix pentru shrink loop:
+       cu auto-row, grid se dimensionează la max content (canvas-container) →
+       când fit-ul scade cssH, wrap-ul se contractă → fit-ul recalculează mai
+       mic → buclă. Cu 1fr, row = parent height stabil. */
+    grid-template-rows: minmax(0, 1fr);
     gap: 0;
     flex: 1;
     min-height: 0;
     overflow: hidden;
+    /* Outside-area în jurul wrap-ului (când mockup are aspect diferit de cell-ul grid).
+       Wrap-ul își ia aspect-ratio din --pd-mockup-aspect → restul grid cell-ului
+       e vizibil cu acest fundal neutru, nu cu fundal dark din wrap. */
+    background: #f4f4f4;
 }
 .pd-tools {
     padding: 14px;
@@ -180,21 +189,32 @@
 }
 
 .pd-canvas-wrap {
-    display: flex;
-    /* `safe center` previne bug-ul flexbox unde conținutul mai mare decât
-       containerul e tăiat în partea de sus / stânga și inaccesibil prin scroll
-       (flex calculează centrarea cu margin negative). Cu `safe`, browserul
-       cade înapoi la `start` când conținutul ar depăși. */
-    align-items: safe center;
-    justify-content: safe center;
-    background: #2e2e2e;
-    padding: 16px;
-    /* `min-height: 0` e necesar când .pd-canvas-wrap e copil de grid/flex
-       cu înălțime constrânsă — fără el, conținutul intrinsec forțează
-       wrap-ul să crească peste limita parintelui (Firefox/Chrome). */
+    /* CRITIC: position relative ca să fie containing block pentru canvas-container
+       care e position: absolute (setat din JS). Asta îl scoate pe canvas-container
+       din content sizing al wrap-ului → wrap dimensiune e determinată exclusiv
+       de aspect-ratio + bound-uri max, nu de content. */
+    position: relative;
+    /* Aspect-ratio condus de JS via --pd-mockup-aspect (setat în loadMockupForSide
+       și actualizat la setActiveSide). Wrap-ul ia automat raportul mockup-ului →
+       zero benzi negre, mockup-ul ocupă INTEGRAL containerul propriu.
+       Fallback 6/7 = aspect-ul default canvas (600×700) înainte de mockup load. */
+    aspect-ratio: var(--pd-mockup-aspect, 6 / 7);
+    /* ANCHOR pe height: 100% (umple grid cell-ul vertical) → width = height × ratio.
+       Dacă width depășește cell width, max-width: 100% clampează → spec CSS Sizing
+       reduce AMBELE dimensiuni proporțional pentru a păstra aspect-ratio.
+       NU folosi width:auto + height:auto — content size = 0 (canvas-container
+       e position:absolute, nu contribuie) → wrap colapsează la 0×0. */
+    height: 100%;
+    max-width: 100%;
+    /* Centrare în grid cell pe AMBELE axe — margin:auto distribuie spațiul rămas.
+       Pe orizontal: când mockup portrait într-un cell wide (width < cell.width).
+       Pe vertical: când max-width clampează → height redus < 100% (mockup landscape în cell tall). */
+    margin: auto;
+    background: #2e2e2e; /* dark numai sub mockup (vizibil dacă PNG are transparență) */
+    padding: 0;
     min-width: 0;
     min-height: 0;
-    overflow: auto;
+    overflow: hidden;
 }
 /* IMPORTANT: nu seta background pe TOATE canvas-urile — fabric creează un
    upper-canvas transparent peste lower-canvas. Un background opac aici ar
@@ -437,6 +457,7 @@
         grid-template-columns: 1fr;
         grid-template-rows: 1fr auto;
         gap: 0;
+        /* Outside-area în jurul wrap-ului pe mobile — bg neutru moștenit din desktop. */
     }
 
     /* Sidebar desktop dispare; copiii sunt ascunși via individual selectors mai jos. */
@@ -468,13 +489,12 @@
     }
     .pd-status:empty { display: none; }
 
-    /* Canvas wrap fill 1fr.
-       overflow: hidden previne orice scroll horizontal (chiar dacă fitCanvasToWrap
-       are bug de rounding sub-pixel, conținutul e clipat — nu apare bara de scroll
-       care ar permite "imaginea iese din ecran"). */
+    /* Canvas wrap pe mobile: aspect-ratio moștenit din regula globală (--pd-mockup-aspect).
+       place-self: center (din regula globală) îl centrează în grid row 1fr —
+       outside-area apare deasupra/dedesubt sau lateral, în funcție de orientare. */
     .pd-canvas-wrap {
         order: 1;
-        padding: 4px;
+        padding: 0;
         min-height: 0;
         min-width: 0;
         position: relative;

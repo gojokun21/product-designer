@@ -248,13 +248,29 @@
 .pd-continue-to-design:hover:not(:disabled) { background: #000; }
 .pd-continue-to-design:disabled { background: #999; cursor: not-allowed; opacity: .7; }
 
-/* Step 3: layout designer */
+/* Step 3: layout designer
+   CRITIC: layout HEIGHT EXPLICIT pe desktop ca să decuplăm wrap height de
+   canvas-container (Fabric wrapper). Cu min-height + auto-row, grid se
+   dimensiona la max content (canvas-container) → când fitCanvasToWrap seta
+   cssH pe canvas-container, wrap se contracta la noul cssH (minus pad+safety)
+   → următorul fit folosea acea înălțime mai mică → BUCLĂ DE SHRINKING.
+   Cu height explicit + grid-template-rows: 1fr, row = container height,
+   wrap = row height, totul stabil indiferent de content. */
 .pd-designer-layout {
     display: grid;
     grid-template-columns: 220px 1fr 280px;
+    grid-template-rows: 1fr;
     gap: 16px;
     align-items: stretch;
-    min-height: 600px;
+    /* Hard-cap 900px ELIMINAT — pe ecrane mari (4K, 1440p) folosim toată
+       înălțimea utilă a viewport-ului. Wrap-ul își ia aspect-ul mockup-ului →
+       crește proporțional, fără jank. min 480px ca să nu fie spăimos pe laptop-uri. */
+    height: max(480px, calc(var(--pd-vh, 1vh) * 100 - 180px));
+}
+@supports (height: 100dvh) {
+    .pd-designer-layout {
+        height: max(480px, calc(100dvh - 180px));
+    }
 }
 .pd-designer-layout .pd-tools {
     border: 1px solid #e0e0e0;
@@ -264,18 +280,12 @@
 .pd-designer-layout .pd-canvas-wrap {
     border: 1px solid #e0e0e0;
     border-radius: 8px;
-    min-height: 480px;
-    /* Cap înălțimea ca mockup-uri mari să se încadreze în viewport
-       — fitCanvasToWrap (designer.js) scalează atunci canvas-ul prin CSS
-       pentru a respecta atât lățimea cât și înălțimea disponibilă.
-       Pe desktop folosim dvh (sau --pd-vh fallback) ca să respectăm
-       browser chrome-ul corect. */
-    max-height: calc(var(--pd-vh, 1vh) * 100 - 180px);
-}
-@supports (max-height: 100dvh) {
-    .pd-designer-layout .pd-canvas-wrap {
-        max-height: calc(100dvh - 180px);
-    }
+    /* aspect-ratio + place-self: center moștenite din regula globală
+       `.pd-canvas-wrap` (designer.css). Wrap-ul ia aspect-ul mockup-ului
+       și se centrează în grid cell-ul 1fr; restul devine outside-area. */
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
 }
 
 /* ==========================================================================
@@ -471,17 +481,18 @@
         border-radius: 0;
         min-height: 0;
         min-width: 0;
-        max-height: none;
-        padding: 4px;
+        padding: 0;
+        /* aspect-ratio + place-self: center din regula globală — wrap se
+           dimensionează la mockup, restul rândului 1fr e outside-area. */
         background: #2e2e2e;
         position: relative;
         touch-action: none;
-        overflow: hidden; /* clip orice surplus pe sub-pixel rounding */
+        overflow: hidden;
     }
-
-    /* Canvas wrap pe mobile — desktop max-height removed (covered by grid 1fr). */
-    @supports (height: 100dvh) {
-        .pd-designer-layout .pd-canvas-wrap { max-height: none; }
+    /* Outside-area pe mobile: rândul grid 2 (canvas area) primește bg neutru
+       de la panel-ul step 3 (care e display: contents → bg-ul vine din .pd-constructor). */
+    .pd-constructor[data-step="3"] {
+        background: #f4f4f4;
     }
 
     /* Bottom-bar din designer.css pe rândul 3. */

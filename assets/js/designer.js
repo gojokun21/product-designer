@@ -211,6 +211,20 @@
         c.pdSide = side;
         attachTouchGestures(c);
 
+        // CRITIC: scoate `.canvas-container` (wrapperEl) din flow-ul de sizing al
+        // părintelui (.pd-canvas-wrap). Cu position: absolute + centrare prin
+        // transform, dimensiunile canvas-ului nu mai contribuie la calculul
+        // wrap-ului → wrap height/width sunt determinate DOAR de grid layout
+        // (parent), ceea ce le face stabile. Asta breaks shrink loop-ul matematic.
+        // Setarea inline override-uiește orice CSS Fabric ar pune (Fabric setează
+        // inline `position: relative` pe wrapperEl by default).
+        if (c.wrapperEl) {
+            c.wrapperEl.style.position  = 'absolute';
+            c.wrapperEl.style.top       = '50%';
+            c.wrapperEl.style.left      = '50%';
+            c.wrapperEl.style.transform = 'translate(-50%, -50%)';
+        }
+
         // Vizibilitate gestionată pe `.canvas-container` (părintele creat de Fabric),
         // NU pe lower-canvas. Se sincronizează cu `activeSide`.
         applyContainerVisibility(side);
@@ -219,6 +233,16 @@
             width:  PDData.canvas.width,
             height: PDData.canvas.height
         });
+
+        // Aspect default pe wrap înainte de încărcarea mockup-ului — evită flicker
+        // dacă wrap-ul ar rămâne fără `aspect-ratio` la primul render.
+        var wrapEl0 = document.querySelector('.pd-canvas-wrap');
+        if (wrapEl0 && !wrapEl0.style.getPropertyValue('--pd-mockup-aspect')) {
+            wrapEl0.style.setProperty(
+                '--pd-mockup-aspect',
+                PDData.canvas.width + ' / ' + PDData.canvas.height
+            );
+        }
 
         c.on('selection:created', onSelection);
         c.on('selection:updated', onSelection);
@@ -285,6 +309,13 @@
 
             c.setDimensions({ width: w, height: h });
 
+            // Wrap-ul își ia aspect-ratio-ul mockup-ului → fără benzi negre,
+            // grid cell-ul devine outside-area (centrat via place-self).
+            mockupAspect[side] = w + ' / ' + h;
+            if (side === activeSide) {
+                applyMockupAspectToWrap(side);
+            }
+
             var fImg = new fabric.Image(native, {
                 left: 0, top: 0,
                 scaleX: cap, scaleY: cap,
@@ -344,6 +375,10 @@
         var prev = activeSide;
         activeSide = side;
 
+        // Aspect-ratio-ul wrap-ului se actualizează la mockup-ul side-ului activ.
+        // (front/back pot avea aspect diferit → wrap se redimensionează corect.)
+        applyMockupAspectToWrap(activeSide);
+
         // Curăță selecția pe canvas-ul vechi (UI controls referă obiectul activ).
         if (canvases[prev]) {
             canvases[prev].discardActiveObject();
@@ -393,19 +428,17 @@
         var wrap = $('.pd-canvas-wrap')[0];
         var c = activeCanvas();
         if (!wrap || !c) { return; }
-        innerW = innerW || c.getWidth();
-        innerH = innerH || c.getHeight();
+        innerW = innerW || lastInnerW || c.getWidth();
+        innerH = innerH || lastInnerH || c.getHeight();
         if (!innerW || !innerH) { return; }
+        if (innerW && innerH) { lastInnerW = innerW; lastInnerH = innerH; }
 
-        // getBoundingClientRect() e precis sub-pixel și reflectă layout-ul real
-        // după orice transformare CSS sau scale.
         var rect  = wrap.getBoundingClientRect();
         var style = window.getComputedStyle ? window.getComputedStyle(wrap) : null;
         var padX  = style ? (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight)  || 0) : 0;
         var padY  = style ? (parseFloat(style.paddingTop)  || 0) + (parseFloat(style.paddingBottom) || 0) : 0;
-        var safety = 2;
-        var availW = Math.max(50, rect.width  - padX - safety);
-        var availH = Math.max(50, rect.height - padY - safety);
+        var availW = Math.max(50, rect.width  - padX);
+        var availH = Math.max(50, rect.height - padY);
         var scale  = Math.min(availW / innerW, availH / innerH, 1);
         var cssW   = Math.floor(innerW * scale);
         var cssH   = Math.floor(innerH * scale);
@@ -413,10 +446,8 @@
         // 1) Set prin Fabric (canonical — actualizează stările interne Fabric).
         c.setDimensions({ width: cssW, height: cssH }, { cssOnly: true });
 
-        // 2) FORCE inline styles direct pe DOM. Fabric 5.3.1 are bug pe iOS Safari
-        // unde `wrapperEl.style.width` setat din _setCssDimension nu se propagă
-        // întotdeauna înainte de painting (race cu reflow). Setarea directă
-        // garantează că CSS-ul e aplicat. Plus `max-width: 100%` ca safety net.
+        // 2) FORCE inline styles direct pe DOM (fix iOS Safari race condition
+        // unde Fabric._setCssDimension nu propagă mereu înainte de paint).
         var px = function (n) { return n + 'px'; };
         if (c.lowerCanvasEl) {
             c.lowerCanvasEl.style.width  = px(cssW);
@@ -427,26 +458,15 @@
             c.upperCanvasEl.style.height = px(cssH);
         }
         if (c.wrapperEl) {
-            c.wrapperEl.style.width     = px(cssW);
-            c.wrapperEl.style.height    = px(cssH);
-            c.wrapperEl.style.maxWidth  = '100%';
-            c.wrapperEl.style.maxHeight = '100%';
-        }
-
-        // 3) Diagnostic log — TEMPORAR activat ca să vedem pe telefon ce se întâmplă.
-        // Va fi eliminat după ce confirmi că fit-ul funcționează corect.
-        // Pentru a-l dezactiva manual: setează `window.PDDebugFit = false` în console.
-        if (window.console && window.PDDebugFit !== false) {
-            console.log('[PD fit]', {
-                wrap:  rect.width.toFixed(1) + 'x' + rect.height.toFixed(1),
-                pad:   padX + 'x' + padY,
-                avail: availW.toFixed(0) + 'x' + availH.toFixed(0),
-                inner: innerW + 'x' + innerH,
-                scale: scale.toFixed(3),
-                css:   cssW + 'x' + cssH,
-                wrapperW: c.wrapperEl ? c.wrapperEl.style.width : '?',
-                wrapperH: c.wrapperEl ? c.wrapperEl.style.height : '?'
-            });
+            c.wrapperEl.style.width  = px(cssW);
+            c.wrapperEl.style.height = px(cssH);
+            // Re-asigură position absolute + centering în caz că Fabric le-a
+            // resetat la setDimensions (defensive — Fabric uneori re-aplică
+            // inline `position: relative` când refresh-uiește layout).
+            c.wrapperEl.style.position  = 'absolute';
+            c.wrapperEl.style.top       = '50%';
+            c.wrapperEl.style.left      = '50%';
+            c.wrapperEl.style.transform = 'translate(-50%, -50%)';
         }
     }
 
@@ -478,6 +498,24 @@
 
     var wrapObserver = null;
     var wrapObserverTimer = null;
+    var lastInnerW = 0, lastInnerH = 0;
+    var lastWrapW = 0, lastWrapH = 0;
+
+    // Aspect-ratio per side — `.pd-canvas-wrap` se auto-dimensionează la
+    // raportul mockup-ului activ (`aspect-ratio: var(--pd-mockup-aspect)`),
+    // eliminând benzi negre și folosind tot spațiul disponibil în grid cell.
+    var mockupAspect = { front: null, back: null };
+
+    function applyMockupAspectToWrap(side) {
+        var wrap = document.querySelector('.pd-canvas-wrap');
+        if (!wrap) { return; }
+        var aspect = mockupAspect[side];
+        if (!aspect) { return; }
+        wrap.style.setProperty('--pd-mockup-aspect', aspect);
+    }
+    // ResizeObserver e SIGUR acum: cu canvas-container `position: absolute`,
+    // canvas-ul nu mai contribuie la wrap content sizing → wrap dimensiuni
+    // sunt stabile, ResizeObserver fires doar pe schimbări reale (window resize).
     function observeWrap() {
         if (typeof window.ResizeObserver === 'undefined') { return; }
         var wrap = document.querySelector('.pd-canvas-wrap');
@@ -489,6 +527,15 @@
             if (!activeCanvas()) { return; }
             clearTimeout(wrapObserverTimer);
             wrapObserverTimer = setTimeout(function () {
+                var w = document.querySelector('.pd-canvas-wrap');
+                if (!w) { return; }
+                var r = w.getBoundingClientRect();
+                // Dedup: refit doar la schimbări semnificative (evită echo intern).
+                if (Math.abs(r.width - lastWrapW) < 1 && Math.abs(r.height - lastWrapH) < 1) {
+                    return;
+                }
+                lastWrapW = r.width;
+                lastWrapH = r.height;
                 fitCanvasToWrap();
             }, 80);
         });
@@ -1177,6 +1224,9 @@
         $('.pd-bb-edit-text').prop('hidden', true);
         $('.pd-bb-delete').prop('disabled', true);
         $('.pd-zoom-reset').prop('hidden', true);
+        // Reset cache fit la fiecare schimbare de produs.
+        lastInnerW = 0; lastInnerH = 0;
+        lastWrapW = 0; lastWrapH = 0;
 
         availableSides = determineAvailableSides(PDData);
         // Always default to front when available.
