@@ -119,28 +119,30 @@ final class Frontend {
                 // Blocul „Personalizează" de pe pagina produsului.
                 'editDesign'  => __( 'Editează designul', 'product-designer' ),
                 'needDesign'  => __( 'Creează-ți designul, apoi îl poți adăuga în coș.', 'product-designer' ),
-                'staleDesign' => __( 'Ai schimbat mărimea imprimeului. Deschide editorul, verifică designul și salvează-l din nou.', 'product-designer' ),
             ],
         ];
     }
 
     /**
-     * Strings for the print-size frame and the second-side price, shared with
-     * the Constructor config. `%s` = formatted price.
+     * Strings for the print-size picker, frame and price, shared with the
+     * Constructor config. `%s` = formatted price.
      *
      * @return array<string,string>
      */
     public static function print_strings() : array {
         return [
-            'outOfFrame'     => __( 'O parte din design iese din cadrul imprimeului și nu va fi imprimată. Micșorează-l sau alege un imprimeu mai mare.', 'product-designer' ),
-            'fittedToFrame'  => __( 'Designul a fost micșorat ca să încapă în cadrul imprimeului ales.', 'product-designer' ),
-            'printSizeFirst' => __( 'Alege mărimea imprimeului înainte de a salva designul.', 'product-designer' ),
-            'moveFrame'      => __( 'Trage cadrul unde vrei să fie imprimeul', 'product-designer' ),
-            'unitCm'         => _x( 'cm', 'centimetri', 'product-designer' ),
-            /* translators: %s: price of printing the second side */
-            'secondSideHint' => __( 'Prețul include imprimeul pe o parte. Față + spate: +%s', 'product-designer' ),
-            /* translators: %s: price of printing the second side */
-            'secondSideOn'   => __( 'Design pe față și spate: +%s la preț', 'product-designer' ),
+            'outOfFrame'    => __( 'O parte din design iese din cadrul imprimeului și nu va fi imprimată. Micșorează-l sau alege un imprimeu mai mare.', 'product-designer' ),
+            'fittedToFrame' => __( 'Designul a fost micșorat ca să încapă în cadrul imprimeului ales.', 'product-designer' ),
+            'moveFrame'     => __( 'Trage cadrul unde vrei să fie imprimeul', 'product-designer' ),
+            'unitCm'        => _x( 'cm', 'centimetri', 'product-designer' ),
+            'printSize'     => __( 'Mărime imprimeu', 'product-designer' ),
+            /* translators: a print size that adds nothing to the price */
+            'printIncluded' => __( 'inclus', 'product-designer' ),
+            /* translators: %s: what the print sizes add to the price */
+            'printExtra'    => __( 'Imprimeu: +%s la preț', 'product-designer' ),
+            'printFront'    => __( 'Imprimeu față', 'product-designer' ),
+            'printBack'     => __( 'Imprimeu spate', 'product-designer' ),
+            'printTotal'    => __( 'Total', 'product-designer' ),
         ];
     }
 
@@ -157,9 +159,8 @@ final class Frontend {
         $config = $this->build_config( $product_id );
         ?>
         <?php
-        // data-state: empty (fără design — „Adaugă în coș" deschide editorul),
-        // saved (designul e atașat comenzii), stale (salvat pentru altă mărime
-        // de imprimeu). Îl schimbă cartBridge.js.
+        // data-state: empty (fără design — „Adaugă în coș" deschide editorul)
+        // sau saved (designul e atașat comenzii). Îl schimbă cartBridge.js.
         ?>
         <div class="pd-frontend-wrap" data-state="empty">
             <button type="button" class="button pd-open-designer">

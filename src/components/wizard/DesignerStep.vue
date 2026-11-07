@@ -23,16 +23,14 @@ const active = computed(() => wizard.step === 3);
 provide('pdPickColor', (o) => wizard.chooseColorByMockup(o.front_url));
 
 // Back from the options with another variation of the same product: keep the
-// design, switch the mockup and the print frame.
+// design (and the print size picked per side), switch the mockup.
 watch(
   () => wizard.designerConfig,
   (cfg, prev) => {
     if (!cfg || !prev || !shellRef.value || cfg.product.id !== prev.product.id) {
       return;
     }
-    const fabric = shellRef.value.fabric;
-    fabric.swapMockups(cfg.product.mockup_front_url, cfg.product.mockup_back_url);
-    fabric.setPrintSize(cfg.product.print_size);
+    shellRef.value.fabric.swapMockups(cfg.product.mockup_front_url, cfg.product.mockup_back_url);
   }
 );
 

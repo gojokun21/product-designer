@@ -33,7 +33,7 @@ final class Cart {
         add_filter( 'woocommerce_get_item_data',              [ $this, 'display_in_cart' ], 10, 2 );
         add_filter( 'woocommerce_cart_item_thumbnail',        [ $this, 'replace_thumbnail' ], 10, 3 );
         add_filter( 'woocommerce_add_to_cart_validation',     [ $this, 'validate_cart_add' ], 10, 5 );
-        // The second-side price goes on the line's product object. Both hooks
+        // The print-size extra goes on the line's product object. Both hooks
         // get a freshly loaded product (on add, and on every cart load from the
         // session), so the price is raised exactly once per request.
         add_filter( 'woocommerce_add_cart_item',              [ $this, 'apply_extra_price' ], 20, 1 );
@@ -59,13 +59,14 @@ final class Cart {
             return false;
         }
 
-        // The price depends on the print size, and the editor frame follows it:
-        // a design saved for "Mare" must not be bought as "Mic".
-        $size = $this->storage->print_size_for_variation( $product_id, (int) $variation_id, (array) $variations );
-        if ( $size ) {
-            $made_for = $this->storage->print_size_of( $product_id, $this->storage->design_print_size( $design['design_id'] ) );
-            if ( ! $made_for || $made_for['slug'] !== $size['slug'] ) {
-                wc_add_notice( __( 'Designul a fost salvat pentru altă mărime de imprimeu. Deschide editorul, verifică designul și salvează-l din nou.', 'product-designer' ), 'error' );
+        // The price follows the print size of each printed side, read from the
+        // saved JSON. A size the admin has since removed can't be priced.
+        if ( $this->storage->get_print_sizes( $product_id )['sizes'] ) {
+            $json  = $this->storage->get_design_json( $design['design_id'] );
+            $sizes = is_array( $json ) ? Design_Storage::design_side_sizes( $json ) : [];
+            $price = $sizes ? $this->storage->print_price( $product_id, $sizes ) : null;
+            if ( ! $price || in_array( '', array_column( $price['sides'], 'size' ), true ) ) {
+                wc_add_notice( __( 'Mărimea imprimeului din design nu mai este disponibilă. Deschide editorul, alege mărimea și salvează designul din nou.', 'product-designer' ), 'error' );
                 return false;
             }
         }
@@ -118,12 +119,9 @@ final class Cart {
             return $cart_item_data;
         }
 
-        $design           = $this->submitted_design( $product_id );
-        $design_id        = $design['design_id'];
-        $preview_url      = $design['preview_url'];
-        $preview_back_url = $design['preview_back_url'];
-        $json_url         = $design['json_url'];
-        $mockup_color     = $design['mockup_color'];
+        $design       = $this->submitted_design( $product_id );
+        $design_id    = $design['design_id'];
+        $mockup_color = $design['mockup_color'];
 
         $this->debug_log( sprintf(
             'capture_design: product=%d, design_id="%s", POST keys: %s',
@@ -163,23 +161,33 @@ final class Cart {
             return $cart_item_data;
         }
 
-        // The variation price covers one print position; a design on both sides
-        // pays the print size's second-side price on top.
-        $size  = $this->storage->print_size_for_variation( $product_id, $variation_id );
-        $extra = ( $size && $preview_url !== '' && $preview_back_url !== '' ) ? $size['second_side_price'] : 0.0;
+        // Everything that decides the price comes from the server's own files,
+        // not from the posted fields: the printed sides and their print sizes
+        // from the JSON, the preview URLs from disk. Posting an empty back URL
+        // no longer skips the back's price.
+        $json  = $this->storage->get_design_json( $design_id );
+        $urls  = $this->storage->preview_urls( $design_id );
+        $price = $this->storage->print_price( $product_id, is_array( $json ) ? Design_Storage::design_side_sizes( $json ) : [] );
 
         $cart_item_data['pd_design'] = [
             'design_id'        => $design_id,
-            'preview_url'      => $preview_url,
-            'preview_back_url' => $preview_back_url,
-            'json_url'         => $json_url,
+            'preview_url'      => $urls['front'],
+            'preview_back_url' => $urls['back'],
+            'json_url'         => (string) $files['json']['url'],
             'mockup_color'     => $mockup_color,
-            'print_size'       => $size ? $size['slug'] : '',
-            'extra_price'      => $extra,
+            // side => {size, label, w, h, amount}; see Design_Storage::print_price().
+            'print'            => $price['sides'],
+            'extra_price'      => $price['extra'],
             // Unique key forces WC to treat items with different designs as separate rows.
             'unique_key'       => md5( $design_id ),
         ];
-        $this->debug_log( "capture_design: OK — design_id $design_id atașat la cart item (front=" . ( $preview_url ? 'da' : 'nu' ) . ", back=" . ( $preview_back_url ? 'da' : 'nu' ) . ")." );
+        $this->debug_log( sprintf(
+            'capture_design: OK — design_id %s atașat la cart item (front=%s, back=%s, extra=%s).',
+            $design_id,
+            $urls['front'] !== '' ? 'da' : 'nu',
+            $urls['back'] !== '' ? 'da' : 'nu',
+            $price['extra']
+        ) );
         return $cart_item_data;
     }
 
@@ -213,10 +221,15 @@ final class Cart {
     }
 
     /**
-     * „Față + spate (+75 lei)" — where the design is printed and what the
-     * second side added to the price.
+     * „Față: Mic 10 × 10 cm · Spate: Mare 28 × 40 cm (+100 MDL)" — where the
+     * design is printed, how big, and what the print sizes added to the price.
+     * Cart lines added before per-side sizes (no `print` key) keep the old
+     * „Față + spate (+75 MDL)" wording.
      */
     public static function print_sides_label( array $design ) : string {
+        if ( isset( $design['print'] ) && is_array( $design['print'] ) ) {
+            return Design_Storage::print_summary( [ 'sides' => $design['print'], 'extra' => $design['extra_price'] ?? 0 ] );
+        }
         $sides = [];
         if ( ! empty( $design['preview_url'] ) ) {
             $sides[] = __( 'Față', 'product-designer' );
@@ -236,7 +249,7 @@ final class Cart {
         $sides = isset( $cart_item['pd_design'] ) && is_array( $cart_item['pd_design'] ) ? self::print_sides_label( $cart_item['pd_design'] ) : '';
         if ( $sides !== '' ) {
             $item_data[] = [
-                'key'   => __( 'Imprimeu pe', 'product-designer' ),
+                'key'   => __( 'Imprimeu', 'product-designer' ),
                 'value' => esc_html( $sides ),
             ];
         }

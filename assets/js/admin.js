@@ -218,13 +218,5 @@
                 $(this).prop('hidden', $(this).attr('data-attr') !== attr);
             });
         });
-
-        // Print sizes section: same idea, empty value hides every table.
-        $(document).on('change', '.pd-print-size-attr-select', function () {
-            var attr = $(this).val();
-            $('.pd-print-sizes').each(function () {
-                $(this).prop('hidden', $(this).attr('data-attr') !== attr);
-            });
-        });
     });
 })(jQuery);

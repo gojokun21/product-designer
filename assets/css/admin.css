@@ -236,6 +236,11 @@
 #pd_product_data .pd-print-sizes__table input[type="number"] {
     width: 80px;
 }
+/* Coloanele „Implicit față / spate" (radio). */
+.pd-print-sizes__table th:nth-last-child(-n+2),
+.pd-print-sizes__table td:nth-last-child(-n+2) {
+    text-align: center;
+}
 .pd-order-design__print {
     margin: 6px 0;
 }

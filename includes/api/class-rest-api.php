@@ -59,7 +59,7 @@ final class Rest_Api {
                 'preview'    => [ 'required' => true ],
                 // Optional custom mockup tint chosen in the editor ('' = original).
                 'mockup_color' => [ 'required' => false, 'type' => 'string' ],
-                // Optional print size + per-side frames: { size, frames: { front, back } }.
+                // Per-side frame + print size: { frames: { front: {x,y,w,h,w_cm,h_cm,size}, back } }.
                 'print'        => [ 'required' => false, 'type' => 'object' ],
             ],
         ] );
@@ -118,11 +118,15 @@ final class Rest_Api {
             return new WP_Error( 'pd_design_invalid', $check['error'] ?? '', [ 'status' => 400 ] );
         }
 
-        // A product with print sizes needs to know which one the design was made
-        // for: the cart refuses a design saved for another print size.
-        $print = $this->storage->sanitize_print_details( $product_id, $request->get_param( 'print' ) );
-        if ( ! $print && $this->storage->get_print_sizes( $product_id )['sizes'] ) {
-            return new WP_Error( 'pd_print_size_missing', __( 'Alege mărimea imprimeului înainte de a salva designul.', 'product-designer' ), [ 'status' => 400 ] );
+        // A product with print sizes needs a size for every printed side: the
+        // frame follows it and the cart prices the design by it.
+        $sides = $this->storage->printed_sides( $check['design'], $check['preview'] );
+        $print = null;
+        if ( $sides && $this->storage->get_print_sizes( $product_id )['sizes'] ) {
+            $print = $this->storage->sanitize_print_details( $product_id, $request->get_param( 'print' ), $sides );
+            if ( ! $print ) {
+                return new WP_Error( 'pd_print_size_missing', __( 'Alege mărimea imprimeului pentru fiecare parte cu design.', 'product-designer' ), [ 'status' => 400 ] );
+            }
         }
 
         // The custom mockup-tint feature was removed in favour of per-color
@@ -131,6 +135,10 @@ final class Rest_Api {
         if ( empty( $persisted['ok'] ) ) {
             return new WP_Error( 'pd_persist_failed', $persisted['error'] ?? '', [ 'status' => 500 ] );
         }
+
+        // Same numbers the cart will charge: computed here from the saved JSON,
+        // shown on the product page right away.
+        $price = $this->storage->print_price( $product_id, $persisted['sides'] );
 
         // Stochează designul în WC Session keyed by product_id.
         // Asta face fluxul cart→order robust indiferent de cum face tema
@@ -155,7 +163,6 @@ final class Rest_Api {
                     'preview_back_url' => $persisted['preview_back_url'] ?? '',
                     'json_url'         => $persisted['json_url'],
                     'mockup_color'     => $mockup_color,
-                    'print_size'       => $persisted['print_size'],
                     'saved_at'         => time(),
                 ] );
                 // Save imediat în DB, nu aștepta shutdown.
@@ -192,7 +199,11 @@ final class Rest_Api {
             'preview_back_url' => $persisted['preview_back_url'] ?? '',
             'json_url'         => $persisted['json_url'],
             'mockup_color'     => $mockup_color,
-            'print_size'       => $persisted['print_size'],
+            // side => print-size key, the extra the sizes add, and the summary
+            // line the cart shows („Față: Mic 10 × 10 cm · Spate: …").
+            'print'            => $persisted['sides'],
+            'extra_price'      => $price['extra'],
+            'print_summary'    => Design_Storage::print_summary( $price ),
             'session_saved'    => $session_saved,
         ], 201 );
     }

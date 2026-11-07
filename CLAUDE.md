@@ -118,6 +118,29 @@ When debugging "design didn't make it to the order", check `wp-content/debug.log
 
 Cart items get a `unique_key` (md5 of design_id) so two of the same product with different designs become separate line items.
 
+## Print sizes (mărimi de imprimeu)
+
+The customer picks a print size **per side** in the editor (`PrintSizePicker.vue` in the stage dock). A small chest logo on the front and a large back print is the common order. The size is not a variation attribute (it was `pa_marime-imprimeu` until 2026-11).
+
+- **Product meta** `_pd_print_sizes`: `{ zone_width_cm, default: {front, back}, sizes: { mic|mediu|mare: {w, h, anchor, price, back_price} } }`.
+  - The keys are fixed (`Design_Storage::PRINT_SIZE_KEYS`) and labelled through gettext (`print_size_label()`).
+  - `sanitize_print_sizes()` also reads schema 1 (it has an `attribute` key, `second_side_price`, and slugs like `imprimeu-mic`).
+  - Admin: product → Product Designer → "Mărimi de imprimeu".
+- **Price rule.** The variation price includes one print of the smallest size.
+  - A design on one side (front or back) adds that size's `price`.
+  - A design on both sides adds the front size's `price` plus the back size's `back_price`, because the back is a second print.
+  - The rule lives in `Design_Storage::print_price()`. `src/composables/usePrintPrice.js` mirrors it for the live numbers. **Change both together.**
+- **Server trust.** The cart never trusts posted URLs or sizes.
+  - The saved JSON holds `print.frames[side].size`. `persist_submission()` keeps only sides that have objects *and* a preview.
+  - `Cart::capture_design()` prices the line from that JSON (`design_side_sizes()` → `print_price()`) and takes the preview URLs from disk (`preview_urls()`).
+  - The cart item carries `pd_design.print` (per side: size, label, cm, amount) and `extra_price`, which `apply_extra_price()` adds via `set_price()`.
+- **Old designs.** Older designs have one top-level `print.size` for both sides. `design_side_sizes()` falls back to it, so old orders still display.
+- **Migration.** `Core\Print_Sizes_Migration` (an `Activator::maybe_upgrade` step, `print_sizes_per_side`) converts schema-1 products once per translation group:
+  - keeps the cheapest size's variations;
+  - deletes the others;
+  - drops the attribute;
+  - derives `price` from the old variation price differences.
+
 ## Design persistence model
 
 `Design_Storage::persist_submission()` writes two files to `wp-uploads/product-designer/<design_id>.{json,png}`:
@@ -142,7 +165,7 @@ Validator enforces 512 KB JSON cap and 4 MB preview cap on `/design`. `Image_Han
 - `pd_settings` (option) — `max_upload_size_mb`, `allowed_mime_types`, `canvas_width`, `canvas_height`. Read via `Validator::settings()`.
 - `pd_constructor_page_id` (option) — auto-installed Constructor page. Owned by `Page_Installer`.
 - `pd_constructor_settings` (option) — currently only carries `title`. Free-form.
-- Per-product meta — `_pd_enabled`, `_pd_mockup_image_id`, `_pd_custom_color` (opt-in for the free mockup-recolor picker; mockup must be white/light because the tint is a multiply blend). Per-variation override — `_pd_mockup_image_id` on the variation post.
+- Per-product meta — `_pd_enabled`, `_pd_mockup_image_id`, `_pd_custom_color` (opt-in for the free mockup-recolor picker; mockup must be white/light because the tint is a multiply blend), `_pd_print_area`, `_pd_print_sizes` (see "Print sizes"). Per-variation override — `_pd_mockup_image_id` on the variation post.
 - Custom mockup color flow — the editor tints the mockup client-side (Fabric `BlendColor` multiply filter), so the chosen color is baked into the preview PNGs. The hex travels REST `/design` (`mockup_color` param, accepted only when the product opted in) → design JSON (`mockup_color` root key) + WC session → `pd_mockup_color` hidden input / POST → cart item (`pd_design.mockup_color`) → order item meta `_pd_design_mockup_color` (internal) plus a customer-visible "Culoare produs" meta.
 - Auto-tint from variation swatches — `Design_Storage::get_variation_term_colors()` builds `[attr → [term slug → hex]]` by applying the `pd_variation_term_color` filter per term (the THEME provides the hex from its swatch term meta, e.g. midy-template hooks it to `midy_swatch_color`); terms with a dedicated per-color mockup are skipped. Flow A ships the map as `PDData.product.variation_colors` and designer.js listens to `found_variation`/`reset_data`; Flow B resolves `auto_tint_color` server-side in `/constructor/product-config`. Both gated by the same `_pd_custom_color` opt-in.
 - Per-template meta — `_pd_is_template`. Taxonomy `pd_template_cat`.

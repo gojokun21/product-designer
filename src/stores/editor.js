@@ -1,10 +1,24 @@
 import { defineStore } from 'pinia';
 import { markRaw } from 'vue';
 
+const emptySaved = () => ({
+  design_id: '',
+  preview_url: '',
+  preview_back_url: '',
+  json_url: '',
+  mockup_color: '',
+  // side => print-size key, what the sizes add to the price (computed by the
+  // server) and its summary line („Față: Mic 10 × 10 cm · Spate: …").
+  print: {},
+  extra_price: 0,
+  print_summary: '',
+});
+
 /**
  * Cross-flow editor state: the live useFabric API (registered by EditorShell so
  * the non-Vue cart bridge can drive auto-tint) and the last saved design result.
- * The heavy reactive canvas state lives in the useFabric instance itself.
+ * The heavy reactive canvas state — including the print size picked per side —
+ * lives in the useFabric instance itself.
  */
 export const useEditorStore = defineStore('pd-editor', {
   state: () => ({
@@ -12,17 +26,7 @@ export const useEditorStore = defineStore('pd-editor', {
     // The mockup the current variation selection should show. Null until a
     // variation is picked; applied on editor boot and live while open.
     currentMockups: { front: null, back: null },
-    // Print size slug of the chosen variation ('' until one is picked); drives
-    // the editor frame like currentMockups drives the mockup.
-    printSize: '',
-    saved: {
-      design_id: '',
-      preview_url: '',
-      preview_back_url: '',
-      json_url: '',
-      mockup_color: '',
-      print_size: '',
-    },
+    saved: emptySaved(),
   }),
   getters: {
     hasDesign: (s) => !!s.saved.design_id,
@@ -38,25 +42,13 @@ export const useEditorStore = defineStore('pd-editor', {
         preview_back_url: res.preview_back_url || '',
         json_url: res.json_url || '',
         mockup_color: res.mockup_color || '',
-        print_size: res.print_size || '',
+        print: res.print && typeof res.print === 'object' ? res.print : {},
+        extra_price: Number(res.extra_price) || 0,
+        print_summary: res.print_summary || '',
       };
     },
     clearSaved() {
-      this.saved = {
-        design_id: '',
-        preview_url: '',
-        preview_back_url: '',
-        json_url: '',
-        mockup_color: '',
-        print_size: '',
-      };
-    },
-    /** Called by the cart bridge with the chosen variation's print size. */
-    setPrintSize(slug) {
-      this.printSize = slug || '';
-      if (this.fabricApi) {
-        this.fabricApi.setPrintSize(this.printSize);
-      }
+      this.saved = emptySaved();
     },
     /** Called by the cart bridge on WC found_variation / reset_data — records the
      * variation's mockup and swaps it live if the editor is already running. */

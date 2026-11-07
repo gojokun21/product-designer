@@ -246,8 +246,9 @@ export const useWizardStore = defineStore('pd-wizard', {
         this.step = 3;
         return;
       }
-      // A saved design belongs to the previous variation (price, print size,
-      // colour). The canvas itself is kept when the product stays the same.
+      // A saved design belongs to the previous variation (price, colour). The
+      // canvas itself — and its per-side print sizes — is kept when the product
+      // stays the same.
       this.resetDesign();
       this.step = 3;
       this.designerError = false;

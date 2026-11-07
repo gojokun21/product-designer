@@ -115,9 +115,9 @@ export function useFabric() {
     selectionIsText: false,
     sideCounts: { front: 0, back: 0 },
     outOfBounds: false,
-    // Chosen print size ({ slug, label, w, h, anchor, second_side_price_text })
-    // and the active side's frame in cm, or null when the product has none.
-    printSize: null,
+    // Chosen print size per side ({ slug, label, w, h, anchor, price, back_price,
+    // … }, null when the product has none) and the active side's frame in cm.
+    printSizes: { front: null, back: null },
     frameCm: null,
     // The active side's frame can be moved and the customer hasn't yet.
     moveFrameHint: false,
@@ -883,10 +883,11 @@ export function useFabric() {
   }
 
   // ---- print sizes: the frame shrinks to the print size the customer pays
-  // for. The zone above is the largest print and `zone_width_cm` wide; a size
+  // for, chosen per side (a small chest logo on the front, a large print on the
+  // back). The zone above is the largest print and `zone_width_cm` wide; a size
   // gets w × h cm at that scale, capped by the zone (e.g. hoodie front, above
   // the pocket). A frame smaller than the zone can be moved anywhere inside it.
-  let printSizeSlug = '';
+  const printSizeSlugs = { front: '', back: '' };
 
   // Where the frame sits in the zone, per side, as a fraction of the room it
   // can travel (0 = left/top edge, 1 = right/bottom edge); null = the size's
@@ -925,7 +926,7 @@ export function useFabric() {
   // chosen, else the whole zone.
   function printAreaPixelRect(side) {
     const zone = zonePixelRect(side);
-    const size = resolvePrintSize(printSizeSlug);
+    const size = resolvePrintSize(printSizeSlugs[side]);
     if (!zone || !size) {
       return zone;
     }
@@ -943,7 +944,7 @@ export function useFabric() {
 
   function frameIsMovable(side) {
     const zone = zonePixelRect(side);
-    if (!zone || !resolvePrintSize(printSizeSlug)) {
+    if (!zone || !resolvePrintSize(printSizeSlugs[side])) {
       return false;
     }
     const px = printAreaPixelRect(side);
@@ -962,7 +963,7 @@ export function useFabric() {
    */
   function placeFrame(side, left, top) {
     const zone = zonePixelRect(side);
-    const size = resolvePrintSize(printSizeSlug);
+    const size = resolvePrintSize(printSizeSlugs[side]);
     if (!zone || !size) {
       return { dx: 0, dy: 0 };
     }
@@ -1107,7 +1108,7 @@ export function useFabric() {
   function frameCmFor(side) {
     const px = printAreaPixelRect(side);
     const k = pxPerCm(side);
-    if (!px || !k || !resolvePrintSize(printSizeSlug)) {
+    if (!px || !k || !resolvePrintSize(printSizeSlugs[side])) {
       return null;
     }
     const round = (n) => Math.round(n * 10) / 10;
@@ -1115,31 +1116,39 @@ export function useFabric() {
   }
 
   /**
-   * Switch the frame to another print size. The new frame goes where the
-   * design already is; a design too big for it is scaled down and centered in
-   * it, so the customer never pays for a size smaller than what they see.
+   * Switch one side's frame to another print size. The new frame goes where
+   * the design already is; a design too big for it is scaled down and centered
+   * in it, so the customer never pays for a size smaller than what they see.
    */
-  function setPrintSize(slug) {
-    const next = slug || '';
-    if (next === printSizeSlug && (state.printSize || !next)) {
+  function setPrintSize(side, slug) {
+    if (SIDES.indexOf(side) === -1) {
       return;
     }
-    printSizeSlug = next;
-    state.printSize = resolvePrintSize(next);
-    let shrunk = false;
-    state.availableSides.forEach((side) => {
-      if (!canvases[side]) {
-        return;
-      }
-      refreshPrintArea(side);
-      followDesign(side);
-      if (fitObjectsToFrame(side)) {
-        shrunk = true;
-      }
-    });
-    if (shrunk) {
+    const next = slug || '';
+    if (next === printSizeSlugs[side] && (state.printSizes[side] || !next)) {
+      return;
+    }
+    printSizeSlugs[side] = next;
+    state.printSizes[side] = resolvePrintSize(next);
+    if (!canvases[side]) {
+      return;
+    }
+    refreshPrintArea(side);
+    followDesign(side);
+    if (fitObjectsToFrame(side)) {
       say((config.i18n || {}).fittedToFrame || '');
     }
+  }
+
+  // The sizes a fresh editor starts at: the product's per-side defaults.
+  function defaultPrintSizes() {
+    const ps = printSizesConfig();
+    const d = (ps && ps.default) || {};
+    const first = ps ? Object.keys(ps.sizes)[0] || '' : '';
+    return {
+      front: ps && ps.sizes[d.front] ? d.front : first,
+      back: ps && ps.sizes[d.back] ? d.back : first,
+    };
   }
 
   // Pull the design inside the frame, scaling it down if needed. Returns
@@ -1476,10 +1485,11 @@ export function useFabric() {
   // Serialize (both sides)
   // ==========================================================================
 
-  // Print size + the frame of each designed side (fractions of the mockup and
-  // cm), stored with the design so production knows where and how big to print.
+  // The frame of each designed side (fractions of the mockup and cm) and its
+  // print size, stored with the design so production knows where and how big
+  // to print, and so the server can price it.
   function printDetails(design) {
-    if (!state.printSize) {
+    if (!printSizesConfig()) {
       return null;
     }
     const frames = {};
@@ -1487,14 +1497,22 @@ export function useFabric() {
       const c = canvases[side];
       const px = printAreaPixelRect(side);
       const cm = frameCmFor(side);
-      if (!design[side] || !c || !px || !cm) {
+      if (!design[side] || !c || !px || !cm || !state.printSizes[side]) {
         return;
       }
       const W = c.getWidth();
       const H = c.getHeight();
-      frames[side] = { x: px.left / W, y: px.top / H, w: px.width / W, h: px.height / H, w_cm: cm.w, h_cm: cm.h };
+      frames[side] = {
+        x: px.left / W,
+        y: px.top / H,
+        w: px.width / W,
+        h: px.height / H,
+        w_cm: cm.w,
+        h_cm: cm.h,
+        size: state.printSizes[side].slug,
+      };
     });
-    return { size: state.printSize.slug, frames };
+    return { frames };
   }
 
   function serialize() {
@@ -1617,8 +1635,14 @@ export function useFabric() {
     state.status = '';
     state.isMobile = isMobile();
 
-    printSizeSlug = (config.product && config.product.print_size) || '';
-    state.printSize = resolvePrintSize(printSizeSlug);
+    // Start at the sizes the caller passes (sizes picked before a remount),
+    // else at the product's defaults.
+    const startSizes = { ...defaultPrintSizes(), ...((config.product && config.product.print_size_by_side) || {}) };
+    SIDES.forEach((side) => {
+      const size = resolvePrintSize(startSizes[side]) ? startSizes[side] : defaultPrintSizes()[side];
+      printSizeSlugs[side] = size || '';
+      state.printSizes[side] = resolvePrintSize(printSizeSlugs[side]);
+    });
     state.frameCm = null;
     state.moveFrameHint = false;
     framePos.front = null;
@@ -1684,6 +1708,7 @@ export function useFabric() {
     swapMockups,
     setPrintSize,
     hasPrintSizes: () => !!printSizesConfig(),
+    printSizesConfig,
     addText,
     addUploadedImage,
     deleteSelected,

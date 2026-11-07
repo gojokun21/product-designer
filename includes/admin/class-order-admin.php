@@ -73,24 +73,32 @@ final class Order_Admin {
             </div>
 
             <?php
+            // Per side: its print size and the frame in cm. Designs saved before
+            // per-side sizes have one `print.size` for both sides (schema-1 slug).
             $print  = is_array( $design ) && isset( $design['print'] ) && is_array( $design['print'] ) ? $design['print'] : null;
             $frames = $print && isset( $print['frames'] ) && is_array( $print['frames'] ) ? $print['frames'] : [];
+            $sizes  = is_array( $design ) ? Design_Storage::design_side_sizes( $design ) : [];
             if ( $print ) :
-                $attribute = $this->storage->get_print_sizes( $product_id )['attribute'];
-                $size_term = $attribute !== '' ? get_term_by( 'slug', (string) $print['size'], $attribute ) : null;
                 ?>
                 <p class="pd-order-design__print">
                     <strong><?php esc_html_e( 'Imprimeu:', 'product-designer' ); ?></strong>
-                    <?php echo esc_html( $size_term instanceof \WP_Term ? $size_term->name : (string) $print['size'] ); ?>
-                    <?php foreach ( [ 'front' => __( 'Față', 'product-designer' ), 'back' => __( 'Spate', 'product-designer' ) ] as $side => $side_label ) :
-                        if ( empty( $frames[ $side ] ) || ( $side === 'front' ? ! $preview_front : ! $preview_back ) ) {
+                    <?php
+                    $parts = [];
+                    foreach ( [ 'front' => __( 'Față', 'product-designer' ), 'back' => __( 'Spate', 'product-designer' ) ] as $side => $side_label ) {
+                        if ( ! isset( $sizes[ $side ] ) ) {
                             continue;
                         }
-                        ?>
-                        <span class="pd-muted">
-                            — <?php echo esc_html( sprintf( '%s: %s × %s cm', $side_label, $frames[ $side ]['w_cm'], $frames[ $side ]['h_cm'] ) ); ?>
-                        </span>
-                    <?php endforeach; ?>
+                        $text = $side_label;
+                        if ( $sizes[ $side ] !== '' ) {
+                            $text .= ': ' . Design_Storage::print_size_label( $sizes[ $side ] );
+                        }
+                        if ( ! empty( $frames[ $side ]['w_cm'] ) ) {
+                            $text .= sprintf( ' — %s × %s cm', $frames[ $side ]['w_cm'], $frames[ $side ]['h_cm'] );
+                        }
+                        $parts[] = $text;
+                    }
+                    echo esc_html( implode( ' · ', $parts ) );
+                    ?>
                 </p>
             <?php endif; ?>
 

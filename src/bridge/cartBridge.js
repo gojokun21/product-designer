@@ -6,17 +6,16 @@
  * `form.cart`; Vue writes their values through `writeHidden`. The theme does
  * AJAX add-to-cart, so the `adding_to_cart` jQuery hook is load-bearing.
  *
- * The `.pd-frontend-wrap` block has three states (`data-state`):
+ * The `.pd-frontend-wrap` block has two states (`data-state`):
  *   empty — no design yet: the add-to-cart button is dimmed and opens the editor;
- *   saved — a design is attached to the add-to-cart;
- *   stale — the design was saved for another print size and must be re-saved.
+ *   saved — a design is attached to the add-to-cart.
  *
  * @param {object} cb
  *   cb.onRequireDesign() — called when the form is submitted with no saved design
  *   cb.onVariation(variation) — WC found_variation (object with variation_id + attributes)
  *   cb.onVariationReset()     — WC reset_data (restore default mockup)
  *   cb.onClear()              — user clicked "Elimină design"
- * @param {object} i18n  config.i18n (customize, editDesign, needDesign, staleDesign)
+ * @param {object} i18n  config.i18n (customize, editDesign, needDesign)
  */
 export function installCartBridge(cb = {}, i18n = {}) {
   const $ = window.jQuery;
@@ -26,7 +25,7 @@ export function installCartBridge(cb = {}, i18n = {}) {
     return el ? el.value : '';
   };
 
-  // The theme adds the second-side price to its "Total" line.
+  // The theme adds what the print sizes cost to its "Total" line.
   function announceExtraPrice(amount) {
     document.dispatchEvent(new CustomEvent('pd:extra-price', { detail: { amount: amount || 0 } }));
   }
@@ -49,16 +48,13 @@ export function installCartBridge(cb = {}, i18n = {}) {
     const hint = wrap.querySelector('.pd-frontend-hint');
     if (hint) {
       hint.hidden = state === 'saved';
-      hint.textContent =
-        state === 'stale'
-          ? i18n.staleDesign || ''
-          : i18n.needDesign || 'Creează-ți designul, apoi îl poți adăuga în coș.';
+      hint.textContent = i18n.needDesign || 'Creează-ți designul, apoi îl poți adăuga în coș.';
     }
   }
 
   /**
    * @param {object} res   REST save response (design_id, preview_url, ...)
-   * @param {object} info  { sides: 'Față + spate (+75 lei)', extra: 75 }
+   * @param {object} info  { sides: 'Față: Mic 10 × 10 cm · Spate: … (+100 MDL)', extra: 100 }
    */
   function writeHidden(res, info = {}) {
     const set = (sel, v) => {

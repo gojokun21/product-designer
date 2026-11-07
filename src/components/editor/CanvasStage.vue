@@ -2,47 +2,68 @@
 import { ref, inject, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import ZoomReset from './ZoomReset.vue';
 import SideTabs from './SideTabs.vue';
+import PrintSizePicker from './PrintSizePicker.vue';
 import ColorSwatches from './ColorSwatches.vue';
+import { printPrice, formatPrice, PRINT_SIDES } from '../../composables/usePrintPrice.js';
 
 const fabric = inject('pdFabric');
 const config = inject('pdConfig', null);
 const emit = defineEmits(['ready', 'wrap-click']);
 
 const i18n = computed(() => (config && config.value && config.value.i18n) || {});
+const product = computed(() => (config && config.value && config.value.product) || {});
+const printSizes = computed(() => {
+  const ps = product.value.print_sizes;
+  return ps && ps.sizes && Number(ps.zone_width_cm) > 0 ? ps : null;
+});
+const activeSize = computed(() => fabric.state.printSizes[fabric.state.activeSide]);
+
 const oobText = computed(() => {
-  if (fabric.state.printSize && i18n.value.outOfFrame) {
+  if (activeSize.value && i18n.value.outOfFrame) {
     return i18n.value.outOfFrame;
   }
   return i18n.value.outOfBounds || 'O parte din design iese din zona imprimabilă și nu va fi imprimată.';
 });
 
+// Bottom dock: Față / Spate, the print size and the product colours, when
+// there is a choice.
+const bothSides = computed(() => fabric.state.availableSides.length === 2);
+const hasSizes = computed(() => !!printSizes.value && Object.keys(printSizes.value.sizes).length > 1);
+const hasColors = computed(() => !!(product.value.color_options && product.value.color_options.length));
+
 const cm = (n) => String(n).replace('.', ',');
-// „Imprimeu mediu · 21 × 30 cm" — the frame of the side being edited.
+// „Spate · Mare · 28 × 40 cm" — the frame of the side being edited.
 const frameLabel = computed(() => {
-  const size = fabric.state.printSize;
+  const size = activeSize.value;
   const frame = fabric.state.frameCm;
-  return size && frame ? size.label + ' · ' + cm(frame.w) + ' × ' + cm(frame.h) + ' ' + (i18n.value.unitCm || 'cm') : '';
-});
-// The variation price covers one side; say what the second one costs, and
-// highlight it once both sides carry a design.
-const bothSidesUsed = computed(() => fabric.state.sideCounts.front > 0 && fabric.state.sideCounts.back > 0);
-const secondSideText = computed(() => {
-  const size = fabric.state.printSize;
-  if (!size || !size.second_side_price_text || fabric.state.availableSides.length < 2) {
+  if (!size || !frame) {
     return '';
   }
-  const tpl = bothSidesUsed.value ? i18n.value.secondSideOn : i18n.value.secondSideHint;
-  return tpl ? tpl.replace('%s', size.second_side_price_text) : '';
+  const parts = [size.label, cm(frame.w) + ' × ' + cm(frame.h) + ' ' + (i18n.value.unitCm || 'cm')];
+  if (bothSides.value) {
+    parts.unshift(fabric.state.activeSide === 'back' ? i18n.value.sideBack || 'Spate' : i18n.value.sideFront || 'Față');
+  }
+  return parts.join(' · ');
+});
+// What the print sizes of the designed sides add to the price, live — the
+// same rule the cart charges by.
+const extraText = computed(() => {
+  if (!printSizes.value) {
+    return '';
+  }
+  const sizes = {};
+  PRINT_SIDES.forEach((side) => {
+    const size = fabric.state.printSizes[side];
+    if (fabric.state.sideCounts[side] > 0 && size) {
+      sizes[side] = size.slug;
+    }
+  });
+  const extra = printPrice(printSizes.value, sizes).extra;
+  const tpl = i18n.value.printExtra || 'Imprimeu: +%s la preț';
+  return extra > 0 ? tpl.replace('%s', formatPrice(extra, printSizes.value.currency)) : '';
 });
 // Until the customer first moves it, say that the frame can be moved.
 const moveHint = computed(() => (fabric.state.moveFrameHint && i18n.value.moveFrame) || '');
-
-// Bottom dock: Față / Spate and the product colours, when there is a choice.
-const bothSides = computed(() => fabric.state.availableSides.length === 2);
-const hasColors = computed(() => {
-  const product = config && config.value && config.value.product;
-  return !!(product && product.color_options && product.color_options.length);
-});
 
 // Status toast: a message shows for a few seconds; progress messages
 // („Se încarcă...") stay until the next one replaces them.
@@ -88,12 +109,12 @@ function onWrapClick(e) {
     <ZoomReset />
     <!-- One column at the top: print-size info, then the out-of-frame warning
          (the dock owns the bottom edge). -->
-    <div v-if="frameLabel || secondSideText || fabric.state.outOfBounds" class="pd-canvas-notes">
-      <div v-if="frameLabel || secondSideText" class="pd-print-info">
+    <div v-if="frameLabel || extraText || fabric.state.outOfBounds" class="pd-canvas-notes">
+      <div v-if="frameLabel || extraText" class="pd-print-info">
         <span v-if="frameLabel" class="pd-print-info__frame">
           <span class="pd-print-info__glyph" aria-hidden="true"></span>{{ frameLabel }}
         </span>
-        <span v-if="secondSideText" class="pd-print-info__extra" :class="{ 'is-on': bothSidesUsed }">{{ secondSideText }}</span>
+        <span v-if="extraText" class="pd-print-info__extra is-on">{{ extraText }}</span>
         <span v-if="moveHint" class="pd-print-info__move">{{ moveHint }}</span>
       </div>
       <div v-if="fabric.state.outOfBounds" class="pd-oob-warning" role="alert">
@@ -101,9 +122,19 @@ function onWrapClick(e) {
         <span>{{ oobText }}</span>
       </div>
     </div>
-    <div v-if="bothSides || hasColors" class="pd-stage-dock" :class="{ 'has-colors': hasColors }">
+    <div
+      v-if="bothSides || hasSizes || hasColors"
+      class="pd-stage-dock"
+      :class="{ 'has-colors': hasColors, 'has-sizes': hasSizes }"
+    >
       <SideTabs />
-      <span v-if="bothSides && hasColors" class="pd-stage-dock__sep" aria-hidden="true"></span>
+      <span
+        v-if="bothSides && (hasSizes || hasColors)"
+        class="pd-stage-dock__sep pd-stage-dock__sep--sides"
+        aria-hidden="true"
+      ></span>
+      <PrintSizePicker />
+      <span v-if="hasSizes && hasColors" class="pd-stage-dock__sep" aria-hidden="true"></span>
       <ColorSwatches />
     </div>
     <div class="pd-status" aria-live="polite">{{ toast }}</div>

@@ -32,14 +32,20 @@ final class Design_Storage {
     public const META_GARMENT_TYPE       = '_pd_garment_type';
     public const META_PRINT_AREA         = '_pd_print_area';
 
-    // Print sizes (mărimi de imprimeu): the variation attribute whose values are
-    // print sizes, the physical width of the printable area above, and per value
-    // the frame in cm, its placement and the price of printing a second side.
-    // Lets the editor shrink the frame to what the customer pays for.
+    // Print sizes (mărimi de imprimeu): the physical width of the printable area
+    // above and, per size, the frame in cm, its placement and its price. The
+    // customer picks a size per side in the editor; see print_price() for the
+    // pricing rule. Schema 1 (before 2026-11) tied one size to a variation
+    // attribute — Print_Sizes_Migration converts it.
     public const META_PRINT_SIZES        = '_pd_print_sizes';
+
+    /** Print-size keys, smallest first. Labels come from gettext (print_size_label) so RU translates via the .po. */
+    public const PRINT_SIZE_KEYS = [ 'mic', 'mediu', 'mare' ];
 
     /** Frame placements inside the printable area. `chest` = wearer's left chest on the front, top-center on the back. */
     public const PRINT_ANCHORS = [ 'top', 'center', 'chest' ];
+
+    public const SIDES = [ 'front', 'back' ];
 
     public const ITEM_META_DESIGN_ID         = '_pd_design_id';
     public const ITEM_META_PREVIEW_URL       = '_pd_design_preview_url';
@@ -125,24 +131,63 @@ final class Design_Storage {
         ];
     }
 
+    /** „Mic" / „Mediu" / „Mare" in the current language. */
+    public static function print_size_label( string $key ) : string {
+        switch ( $key ) {
+            case 'mic':
+                return __( 'Mic', 'product-designer' );
+            case 'mediu':
+                return __( 'Mediu', 'product-designer' );
+            case 'mare':
+                return __( 'Mare', 'product-designer' );
+        }
+        return $key;
+    }
+
     /**
-     * Clean a raw print-size config. Returns the "off" shape (empty attribute,
-     * no sizes) unless the attribute, the area width and at least one size are
-     * all usable.
+     * The print-size key for a stored slug: `mic` stays `mic`, and the schema-1
+     * term slugs (`imprimeu-mic`) found in older configs and designs map to the
+     * same key. Unknown slugs give ''.
+     */
+    public static function print_size_key( string $slug ) : string {
+        $slug = sanitize_title( $slug );
+        if ( in_array( $slug, self::PRINT_SIZE_KEYS, true ) ) {
+            return $slug;
+        }
+        $short = (string) preg_replace( '/^imprimeu-/', '', $slug );
+        return in_array( $short, self::PRINT_SIZE_KEYS, true ) ? $short : '';
+    }
+
+    /** @return array{zone_width_cm:float,default:array{front:string,back:string},sizes:array} */
+    public static function print_sizes_off() : array {
+        return [ 'zone_width_cm' => 0.0, 'default' => [ 'front' => '', 'back' => '' ], 'sizes' => [] ];
+    }
+
+    /**
+     * Clean a raw print-size config. Returns the "off" shape (no sizes) unless
+     * the area width and at least one size are usable.
+     *
+     * Per size: the frame in cm, its anchor, `price` (what the size adds when it
+     * is the only print, or the front of a two-sided design) and `back_price`
+     * (what it adds on the back of a two-sided design). A schema-1 config (it
+     * has an `attribute` key) is read with `second_side_price` as `back_price`
+     * and no `price` — the migration fills `price` from the variation prices.
      *
      * @param mixed $raw
-     * @return array{attribute:string,zone_width_cm:float,sizes:array<string,array{w:float,h:float,anchor:string,second_side_price:float}>}
+     * @return array{zone_width_cm:float,default:array{front:string,back:string},sizes:array<string,array{w:float,h:float,anchor:string,price:float,back_price:float}>}
      */
     public static function sanitize_print_sizes( $raw ) : array {
-        $off = [ 'attribute' => '', 'zone_width_cm' => 0.0, 'sizes' => [] ];
+        $off = self::print_sizes_off();
         if ( ! is_array( $raw ) ) {
             return $off;
         }
-        $attribute = sanitize_text_field( (string) ( $raw['attribute'] ?? '' ) );
-        $zone      = round( (float) ( $raw['zone_width_cm'] ?? 0 ), 1 );
-        $sizes     = [];
+        $legacy = array_key_exists( 'attribute', $raw );
+        $zone   = round( (float) ( $raw['zone_width_cm'] ?? 0 ), 1 );
+        $money  = static fn( $v ) : float => max( 0.0, (float) wc_format_decimal( $v ?? 0 ) );
+        $by_key = [];
         foreach ( (array) ( $raw['sizes'] ?? [] ) as $slug => $size ) {
-            if ( ! is_array( $size ) ) {
+            $key = self::print_size_key( (string) $slug );
+            if ( $key === '' || ! is_array( $size ) ) {
                 continue;
             }
             $w = round( (float) ( $size['w'] ?? 0 ), 1 );
@@ -150,18 +195,38 @@ final class Design_Storage {
             if ( $w <= 0 || $h <= 0 ) {
                 continue;
             }
-            $anchor = (string) ( $size['anchor'] ?? '' );
-            $sizes[ sanitize_title( (string) $slug ) ] = [
-                'w'                 => $w,
-                'h'                 => $h,
-                'anchor'            => in_array( $anchor, self::PRINT_ANCHORS, true ) ? $anchor : 'top',
-                'second_side_price' => max( 0.0, (float) wc_format_decimal( $size['second_side_price'] ?? 0 ) ),
+            $anchor         = (string) ( $size['anchor'] ?? '' );
+            $by_key[ $key ] = [
+                'w'          => $w,
+                'h'          => $h,
+                'anchor'     => in_array( $anchor, self::PRINT_ANCHORS, true ) ? $anchor : 'top',
+                'price'      => $money( $size['price'] ?? 0 ),
+                'back_price' => $money( $legacy ? ( $size['second_side_price'] ?? 0 ) : ( $size['back_price'] ?? 0 ) ),
             ];
         }
-        if ( $attribute === '' || $zone <= 0 || ! $sizes ) {
+        // Always smallest first, whatever order the input had.
+        $sizes = [];
+        foreach ( self::PRINT_SIZE_KEYS as $key ) {
+            if ( isset( $by_key[ $key ] ) ) {
+                $sizes[ $key ] = $by_key[ $key ];
+            }
+        }
+        if ( $zone <= 0 || ! $sizes ) {
             return $off;
         }
-        return [ 'attribute' => $attribute, 'zone_width_cm' => $zone, 'sizes' => $sizes ];
+        $keys    = array_keys( $sizes );
+        $default = is_array( $raw['default'] ?? null ) ? $raw['default'] : [];
+        $front   = self::print_size_key( (string) ( $default['front'] ?? '' ) );
+        $back    = self::print_size_key( (string) ( $default['back'] ?? '' ) );
+        return [
+            'zone_width_cm' => $zone,
+            // A small chest logo is the usual front, a large print the usual back.
+            'default'       => [
+                'front' => isset( $sizes[ $front ] ) ? $front : $keys[0],
+                'back'  => isset( $sizes[ $back ] ) ? $back : $keys[ count( $keys ) - 1 ],
+            ],
+            'sizes'         => $sizes,
+        ];
     }
 
     public function get_print_sizes( int $product_id ) : array {
@@ -178,48 +243,22 @@ final class Design_Storage {
     }
 
     /**
-     * The print size for an attribute value (a variation's `pa_marime-imprimeu`
-     * slug), or null when the product has no print sizes or the value isn't one.
+     * A print size by key (or schema-1 slug), or null when the product has no
+     * print sizes or the slug isn't one of them.
      *
-     * @return array{slug:string,w:float,h:float,anchor:string,second_side_price:float}|null
+     * @return array{slug:string,w:float,h:float,anchor:string,price:float,back_price:float}|null
      */
     public function print_size_of( int $product_id, string $value ) : ?array {
         $config = $this->get_print_sizes( $product_id );
-        if ( ! $config['sizes'] || $value === '' ) {
-            return null;
-        }
-        // Same Polylang caveat as the per-color map: keys are the slugs of the
-        // language the config was saved in.
-        if ( ! isset( $config['sizes'][ $value ] ) ) {
-            $value = I18n_Polylang::match_term_slug( $value, $config['attribute'], array_map( 'strval', array_keys( $config['sizes'] ) ) );
-        }
-        return isset( $config['sizes'][ $value ] ) ? [ 'slug' => $value ] + $config['sizes'][ $value ] : null;
-    }
-
-    /**
-     * The print size chosen for a cart line: read from the posted/cart variation
-     * attributes first, then from the variation itself.
-     *
-     * @param array $attributes `attribute_*` => slug, as WooCommerce passes them.
-     */
-    public function print_size_for_variation( int $product_id, int $variation_id, array $attributes = [] ) : ?array {
-        $config = $this->get_print_sizes( $product_id );
-        if ( ! $config['sizes'] ) {
-            return null;
-        }
-        $key   = 'attribute_' . $config['attribute'];
-        $value = (string) ( $attributes[ $key ] ?? '' );
-        if ( $value === '' && $variation_id ) {
-            $value = (string) get_post_meta( $variation_id, $key, true );
-        }
-        return $this->print_size_of( $product_id, $value );
+        $key    = self::print_size_key( $value );
+        return ( $key !== '' && isset( $config['sizes'][ $key ] ) ) ? [ 'slug' => $key ] + $config['sizes'][ $key ] : null;
     }
 
     /**
      * Print sizes for the editor, with labels in the current language and the
-     * second-side price already formatted.
+     * prices already formatted.
      *
-     * @return array{attribute:string,zone_width_cm:float,sizes:array}|null
+     * @return array{zone_width_cm:float,default:array,sizes:array}|null
      */
     public function print_sizes_for_editor( int $product_id ) : ?array {
         $config = $this->get_print_sizes( $product_id );
@@ -227,14 +266,105 @@ final class Design_Storage {
             return null;
         }
         $sizes = [];
-        foreach ( $config['sizes'] as $slug => $size ) {
-            $term = get_term_by( 'slug', (string) $slug, $config['attribute'] );
-            $sizes[ $slug ] = $size + [
-                'label'                  => $term instanceof \WP_Term ? I18n_Polylang::term_label( $term ) : (string) $slug,
-                'second_side_price_text' => $size['second_side_price'] > 0 ? self::price_text( $size['second_side_price'] ) : '',
+        foreach ( $config['sizes'] as $key => $size ) {
+            $sizes[ $key ] = $size + [
+                'label'           => self::print_size_label( $key ),
+                'price_text'      => $size['price'] > 0 ? self::price_text( $size['price'] ) : '',
+                'back_price_text' => $size['back_price'] > 0 ? self::price_text( $size['back_price'] ) : '',
             ];
         }
-        return [ 'attribute' => $config['attribute'], 'zone_width_cm' => $config['zone_width_cm'], 'sizes' => $sizes ];
+        return [
+            'zone_width_cm' => $config['zone_width_cm'],
+            'default'       => $config['default'],
+            'sizes'         => $sizes,
+            // So the editor can format the running total like wc_price() does.
+            'currency'      => self::currency_format(),
+        ];
+    }
+
+    /**
+     * WooCommerce price format, for formatting amounts in the browser.
+     *
+     * @return array{symbol:string,position:string,decimals:int,decimal:string,thousand:string}
+     */
+    public static function currency_format() : array {
+        return [
+            'symbol'   => html_entity_decode( get_woocommerce_currency_symbol() ),
+            'position' => (string) get_option( 'woocommerce_currency_pos', 'left' ),
+            'decimals' => (int) wc_get_price_decimals(),
+            'decimal'  => (string) wc_get_price_decimal_separator(),
+            'thousand' => (string) wc_get_price_thousand_separator(),
+        ];
+    }
+
+    /**
+     * What the print sizes add to the variation price — the one place the rule
+     * lives (`src/composables/usePrintPrice.js` mirrors it for the live price).
+     *
+     * The variation price includes one print of the smallest size. A design on
+     * one side (front or back) adds that size's `price`. A design on both sides
+     * adds the front size's `price` and the back size's `back_price` — the back
+     * is a second print, cheaper than a first one.
+     *
+     * @param array<string,string> $sizes side => size key, for every printed side
+     *                                    ('' when the product has no print sizes).
+     * @return array{extra:float,sides:array<string,array{size:string,label:string,w:float,h:float,amount:float}>}
+     */
+    public function print_price( int $product_id, array $sizes ) : array {
+        $config = $this->get_print_sizes( $product_id );
+        $both   = isset( $sizes['front'], $sizes['back'] );
+        $out    = [ 'extra' => 0.0, 'sides' => [] ];
+        foreach ( self::SIDES as $side ) {
+            if ( ! array_key_exists( $side, $sizes ) ) {
+                continue;
+            }
+            $key  = self::print_size_key( (string) $sizes[ $side ] );
+            $size = $key !== '' ? ( $config['sizes'][ $key ] ?? null ) : null;
+            if ( ! $size ) {
+                $out['sides'][ $side ] = [ 'size' => '', 'label' => '', 'w' => 0.0, 'h' => 0.0, 'amount' => 0.0 ];
+                continue;
+            }
+            $amount                = ( $both && $side === 'back' ) ? $size['back_price'] : $size['price'];
+            $out['sides'][ $side ] = [
+                'size'   => $key,
+                'label'  => self::print_size_label( $key ),
+                'w'      => $size['w'],
+                'h'      => $size['h'],
+                'amount' => $amount,
+            ];
+            $out['extra'] += $amount;
+        }
+        return $out;
+    }
+
+    /**
+     * „Față: Mic 10 × 10 cm · Spate: Mare 28 × 40 cm (+100 MDL)" — where the
+     * design is printed, how big, and what the print sizes added to the price.
+     *
+     * @param array $price print_price() result.
+     */
+    public static function print_summary( array $price ) : string {
+        $names = [ 'front' => __( 'Față', 'product-designer' ), 'back' => __( 'Spate', 'product-designer' ) ];
+        $parts = [];
+        foreach ( (array) ( $price['sides'] ?? [] ) as $side => $info ) {
+            if ( ! isset( $names[ $side ] ) ) {
+                continue;
+            }
+            $parts[] = empty( $info['size'] )
+                ? $names[ $side ]
+                : sprintf( '%s: %s %s × %s cm', $names[ $side ], $info['label'], self::cm( (float) $info['w'] ), self::cm( (float) $info['h'] ) );
+        }
+        $label = implode( ' · ', $parts );
+        $extra = (float) ( $price['extra'] ?? 0 );
+        if ( $label !== '' && $extra > 0 ) {
+            $label .= ' (+' . self::price_text( $extra ) . ')';
+        }
+        return $label;
+    }
+
+    /** 10 → „10", 10.5 → „10,5". */
+    private static function cm( float $value ) : string {
+        return floor( $value ) == $value ? (string) (int) $value : number_format_i18n( $value, 1 );
     }
 
     /** Plain-text price, without decimals for whole amounts („75 MDL"). */
@@ -244,40 +374,117 @@ final class Design_Storage {
     }
 
     /**
-     * Clean the print details the editor sends along with a design: the chosen
-     * print size and, per side, the frame (fractions of the mockup) and its size
-     * in cm. Kept in the design JSON so production knows where and how big to
-     * print.
+     * Clean the print details the editor sends along with a design: per printed
+     * side, the frame (fractions of the mockup), its print size and its size in
+     * cm. Kept in the design JSON so production knows where and how big to print,
+     * and so the cart can price the design without trusting the browser.
      *
-     * @param mixed $raw
+     * @param mixed    $raw   `{ frames: { front: {x,y,w,h,w_cm,h_cm,size}, back: {...} } }`.
+     *                        A top-level `size` (older editor builds) applies to every frame.
+     * @param string[] $sides The sides the design prints on (printed_sides()).
+     * @return array{frames:array<string,array>}|null Null when a printed side has no valid frame or size.
      */
-    public function sanitize_print_details( int $product_id, $raw ) : ?array {
-        if ( ! is_array( $raw ) ) {
+    public function sanitize_print_details( int $product_id, $raw, array $sides ) : ?array {
+        if ( ! is_array( $raw ) || ! $sides ) {
             return null;
         }
-        $size = $this->print_size_of( $product_id, sanitize_title( (string) ( $raw['size'] ?? '' ) ) );
-        if ( ! $size ) {
-            return null;
-        }
-        $frames = [];
-        foreach ( [ 'front', 'back' ] as $side ) {
-            $frame = $raw['frames'][ $side ] ?? null;
-            $rect  = is_array( $frame ) ? self::sanitize_area( $frame ) : null;
-            if ( ! $rect ) {
-                continue;
+        $fallback   = (string) ( $raw['size'] ?? '' );
+        $raw_frames = is_array( $raw['frames'] ?? null ) ? $raw['frames'] : [];
+        $frames     = [];
+        foreach ( $sides as $side ) {
+            $frame = $raw_frames[ $side ] ?? null;
+            if ( ! is_array( $frame ) ) {
+                return null;
             }
+            $rect = self::sanitize_area( $frame );
+            $size = $this->print_size_of( $product_id, (string) ( $frame['size'] ?? $fallback ) );
+            if ( ! $rect || ! $size ) {
+                return null;
+            }
+            // The frame never exceeds its size; a smaller value means the area
+            // itself was narrower (the cap).
+            $w_cm = round( (float) ( $frame['w_cm'] ?? 0 ), 1 );
+            $h_cm = round( (float) ( $frame['h_cm'] ?? 0 ), 1 );
             $frames[ $side ] = $rect + [
-                'w_cm' => round( (float) ( $frame['w_cm'] ?? 0 ), 1 ),
-                'h_cm' => round( (float) ( $frame['h_cm'] ?? 0 ), 1 ),
+                'size'   => $size['slug'],
+                'w_cm'   => $w_cm > 0 ? min( $w_cm, $size['w'] ) : $size['w'],
+                'h_cm'   => $h_cm > 0 ? min( $h_cm, $size['h'] ) : $size['h'],
+                'anchor' => $size['anchor'],
             ];
         }
-        return [
-            'size'   => $size['slug'],
-            'w_cm'   => $size['w'],
-            'h_cm'   => $size['h'],
-            'anchor' => $size['anchor'],
-            'frames' => $frames,
-        ];
+        return [ 'frames' => $frames ];
+    }
+
+    /**
+     * Side => print-size key for every side a saved design prints on. Designs
+     * saved before per-side sizes carry one top-level `print.size` for both.
+     *
+     * @param array $design get_design_json() result.
+     * @return array<string,string>
+     */
+    public static function design_side_sizes( array $design ) : array {
+        $print = is_array( $design['print'] ?? null ) ? $design['print'] : [];
+        $out   = [];
+        foreach ( self::SIDES as $side ) {
+            if ( empty( $design[ $side ] ) || ! is_array( $design[ $side ] ) ) {
+                continue;
+            }
+            $slug         = $print['frames'][ $side ]['size'] ?? ( $print['size'] ?? '' );
+            $out[ $side ] = self::print_size_key( (string) $slug );
+        }
+        return $out;
+    }
+
+    /**
+     * The sides a submission prints on: a side counts only with objects AND a
+     * preview, exactly the sides persist_submission() keeps.
+     *
+     * @param array        $design   v1 or v2 design payload.
+     * @param array|string $previews v2 `{front, back}` data URIs or a legacy single string.
+     * @return string[]
+     */
+    public function printed_sides( array $design, $previews ) : array {
+        $normalized = $this->normalize_design_to_v2( $design );
+        $previews   = self::normalize_previews( $previews );
+        $sides      = [];
+        foreach ( self::SIDES as $side ) {
+            $has_objects = is_array( $normalized[ $side ] ) && ! empty( $normalized[ $side ]['objects'] );
+            $has_preview = is_string( $previews[ $side ] ) && $previews[ $side ] !== '';
+            if ( $has_objects && $has_preview ) {
+                $sides[] = $side;
+            }
+        }
+        return $sides;
+    }
+
+    /**
+     * @param array|string $previews
+     * @return array{front:mixed,back:mixed}
+     */
+    private static function normalize_previews( $previews ) : array {
+        if ( is_string( $previews ) ) {
+            return [ 'front' => $previews, 'back' => '' ];
+        }
+        if ( ! is_array( $previews ) ) {
+            return [ 'front' => '', 'back' => '' ];
+        }
+        return wp_parse_args( $previews, [ 'front' => '', 'back' => '' ] );
+    }
+
+    /**
+     * Public URLs of a saved design's preview PNGs, read from disk ('' for a
+     * side without one) — the cart uses these instead of the posted URLs.
+     *
+     * @return array{front:string,back:string}
+     */
+    public function preview_urls( string $design_id ) : array {
+        $out = [];
+        foreach ( self::SIDES as $side ) {
+            // The front falls back to a legacy single `pd-{id}.png`.
+            $png          = $this->images->resolve_preview_path( $design_id, $side );
+            $out[ $side ] = is_readable( $png['path'] ) ? (string) $png['url'] : '';
+        }
+        return $out;
     }
 
     /**
@@ -583,32 +790,20 @@ final class Design_Storage {
      * @param string $mockup_color  Optional hex color the customer tinted the mockup with
      *                              ('' = original mockup). Recorded in the JSON for reproduction.
      * @param array|null $print     Print details from sanitize_print_details(), recorded in the JSON.
-     * @return array{ok:bool,error?:string,design_id?:string,preview_url?:string,preview_back_url?:string,json_url?:string,print_size?:string}
+     * @return array{ok:bool,error?:string,design_id?:string,preview_url?:string,preview_back_url?:string,json_url?:string,sides?:array<string,string>}
      */
     public function persist_submission( int $product_id, array $design, $previews, string $mockup_color = '', ?array $print = null ) : array {
         $design_id = $this->generate_design_id( $product_id );
 
-        // Normalize design payload to v2 shape.
+        // Normalize design payload and previews to v2 shape.
         $normalized = $this->normalize_design_to_v2( $design );
-
-        // Normalize previews to v2 shape.
-        if ( is_string( $previews ) ) {
-            $previews = [ 'front' => $previews, 'back' => '' ];
-        } elseif ( ! is_array( $previews ) ) {
-            $previews = [ 'front' => '', 'back' => '' ];
-        }
-        $previews = wp_parse_args( $previews, [ 'front' => '', 'back' => '' ] );
+        $previews   = self::normalize_previews( $previews );
+        $sides      = $this->printed_sides( $design, $previews );
 
         $preview_url      = '';
         $preview_back_url = '';
 
-        foreach ( [ 'front', 'back' ] as $side ) {
-            // Skip sides with no design AND no preview.
-            $has_objects = is_array( $normalized[ $side ] ) && ! empty( $normalized[ $side ]['objects'] );
-            $has_preview = is_string( $previews[ $side ] ) && $previews[ $side ] !== '';
-            if ( ! $has_objects || ! $has_preview ) {
-                continue;
-            }
+        foreach ( $sides as $side ) {
             $png = $this->images->save_preview_png( $previews[ $side ], $design_id, $side );
             if ( empty( $png['ok'] ) ) {
                 return [ 'ok' => false, 'error' => $png['error'] ?? __( 'Eroare preview.', 'product-designer' ) ];
@@ -624,11 +819,12 @@ final class Design_Storage {
             return [ 'ok' => false, 'error' => __( 'Niciun preview valid.', 'product-designer' ) ];
         }
 
-        // Save the combined v2 JSON.
+        // Save the combined v2 JSON. A side without a preview is dropped too, so
+        // the JSON holds exactly what gets printed and priced.
         $json_payload = [
             'version' => 2,
-            'front'   => $normalized['front'],
-            'back'    => $normalized['back'],
+            'front'   => in_array( 'front', $sides, true ) ? $normalized['front'] : null,
+            'back'    => in_array( 'back', $sides, true ) ? $normalized['back'] : null,
         ];
         if ( $mockup_color !== '' ) {
             $json_payload['mockup_color'] = $mockup_color;
@@ -648,17 +844,9 @@ final class Design_Storage {
             'preview_back_url' => $preview_back_url,
             'json_url'         => $json['url'],
             'mockup_color'     => $mockup_color,
-            'print_size'       => $print ? $print['size'] : '',
+            // side => print-size key, for every printed side.
+            'sides'            => self::design_side_sizes( $json_payload ),
         ];
-    }
-
-    /**
-     * The print size slug a saved design was made for ('' for designs saved
-     * before print sizes existed, or for products without them).
-     */
-    public function design_print_size( string $design_id ) : string {
-        $design = $this->get_design_json( $design_id );
-        return is_array( $design ) && isset( $design['print']['size'] ) ? (string) $design['print']['size'] : '';
     }
 
     /**

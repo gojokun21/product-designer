@@ -77,14 +77,13 @@ function tryBoot() {
     // that mockup so we don't load the default then immediately swap (which races).
     const cm = editorStore.currentMockups;
     let cfg = props.config;
-    if (cm.front || cm.back || editorStore.printSize) {
+    if (cm.front || cm.back) {
       cfg = {
         ...props.config,
         product: {
           ...props.config.product,
           mockup_front_url: cm.front || props.config.product.mockup_front_url,
           mockup_back_url: cm.back || props.config.product.mockup_back_url,
-          print_size: editorStore.printSize || props.config.product.print_size,
         },
       };
     }
@@ -149,10 +148,8 @@ async function save() {
     fabric.say(i18n.value.empty || 'Adaugă cel puțin un element în design.');
     return null;
   }
-  if (fabric.hasPrintSizes() && !s.print) {
-    fabric.say(i18n.value.printSizeFirst || 'Alege mărimea imprimeului înainte de a salva designul.');
-    return null;
-  }
+  // Every side starts at a default print size, so `s.print` always carries one
+  // per designed side; the server re-checks and prices it.
   fabric.say(i18n.value.saving || 'Se salvează...');
   try {
     const payload = {

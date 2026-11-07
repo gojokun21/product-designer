@@ -83,11 +83,11 @@ final class Order {
         $item->add_meta_data( Design_Storage::ITEM_META_PREVIEW_BACK_URL, $design['preview_back_url'] ?? '' );
         $item->add_meta_data( Design_Storage::ITEM_META_JSON_URL,         $design['json_url']         ?? '' );
 
-        // Lizibilă pentru client și producție: pe ce parte se imprimă și cât a
-        // costat a doua parte.
+        // Lizibilă pentru client și producție: pe ce parte se imprimă, la ce
+        // mărime și cât au adăugat mărimile la preț.
         $sides = Cart::print_sides_label( $design );
         if ( $sides !== '' ) {
-            $item->add_meta_data( __( 'Imprimeu pe', 'product-designer' ), $sides );
+            $item->add_meta_data( __( 'Imprimeu', 'product-designer' ), $sides );
         }
 
         $mockup_color = Validator::sanitize_hex( $design['mockup_color'] ?? '' );

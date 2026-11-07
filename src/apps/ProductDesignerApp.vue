@@ -41,50 +41,23 @@ function onOpenClick(e) {
 }
 
 const i18n = props.config.i18n || {};
-const printSizes = (props.config.product && props.config.product.print_sizes) || null;
 
-// The variation's print size slug ('' when the product has no print sizes).
-function printSizeOf(variation) {
-  const attrs = (variation && variation.attributes) || {};
-  return printSizes ? attrs['attribute_' + printSizes.attribute] || '' : '';
-}
-
-function applyVariationPrintSize(variation) {
-  const size = printSizeOf(variation);
-  if (!size) {
-    return;
-  }
-  editorStore.setPrintSize(size);
-  // A design saved for another print size can't be bought with this one
-  // (the cart refuses it too): drop it, the editor still holds the objects.
-  const saved = editorStore.saved;
-  if (saved.design_id && saved.print_size && saved.print_size !== size) {
-    editorStore.clearSaved();
-    if (bridge) {
-      bridge.clearHidden('stale');
-    }
-  }
-}
-
-// „Față + spate (+75 lei)" for the saved block, plus the second-side price the
-// theme adds to its total.
+// „Față: Mic 10 × 10 cm · Spate: Mare 28 × 40 cm (+100 MDL)" for the saved
+// block, plus what the print sizes add, which the theme adds to its total.
+// Both come from the server — the same numbers the cart charges.
 function sidesInfo(res) {
-  const front = i18n.sideFront || 'Față';
-  const back = i18n.sideBack || 'Spate';
-  const sides = [];
-  if (res.preview_url) {
-    sides.push(front);
+  let text = res.print_summary || '';
+  if (!text) {
+    const sides = [];
+    if (res.preview_url) {
+      sides.push(i18n.sideFront || 'Față');
+    }
+    if (res.preview_back_url) {
+      sides.push(i18n.sideBack || 'Spate');
+    }
+    text = sides.join(' · ');
   }
-  if (res.preview_back_url) {
-    sides.push(sides.length ? back.toLowerCase() : back);
-  }
-  const size = printSizes && res.print_size ? printSizes.sizes[res.print_size] : null;
-  const extra = res.preview_url && res.preview_back_url && size ? Number(size.second_side_price) || 0 : 0;
-  let text = sides.join(' + ');
-  if (extra && size.second_side_price_text) {
-    text += ' (+' + size.second_side_price_text + ')';
-  }
-  return { sides: text, extra };
+  return { sides: text, extra: Number(res.extra_price) || 0 };
 }
 
 function onSaved(res) {
@@ -105,10 +78,7 @@ onMounted(() => {
   bridge = installCartBridge(
     {
       onRequireDesign: openModal,
-      onVariation: (variation) => {
-        applyVariationMockup(variation);
-        applyVariationPrintSize(variation);
-      },
+      onVariation: (variation) => applyVariationMockup(variation),
       onVariationReset: () => {
         const def = defaultMockups();
         editorStore.swapMockups(def.front, def.back);
@@ -117,14 +87,6 @@ onMounted(() => {
     },
     i18n
   );
-  // The print size already selected (default attributes): found_variation
-  // may have fired before the app mounted.
-  if (printSizes) {
-    const select = document.querySelector('form.variations_form [name="attribute_' + printSizes.attribute + '"]');
-    if (select && select.value) {
-      editorStore.setPrintSize(select.value);
-    }
-  }
   document.addEventListener('click', onOpenClick);
 });
 onBeforeUnmount(() => {

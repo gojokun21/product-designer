@@ -96,13 +96,6 @@
     color: var(--pd-text-muted);
 }
 .pd-frontend-hint[hidden] { display: none; }
-.pd-frontend-wrap[data-state="stale"] .pd-frontend-hint {
-    padding: 8px 12px;
-    color: #7a4f00;
-    background: #fff6e0;
-    border: 1px solid #f1d898;
-    border-radius: var(--pd-radius-sm);
-}
 
 /* Fără design, „Adaugă în coș" deschide editorul (cartBridge.js). */
 form.pd-needs-design .single_add_to_cart_button { opacity: .5; }
@@ -649,6 +642,7 @@ form.pd-needs-design .single_add_to_cart_button { opacity: .5; }
 .pd-color-dot:focus-visible,
 .pd-color-dot--custom:focus-within,
 .pd-side-tab:focus-visible,
+.pd-size-opt:focus-visible,
 .pd-color-swatch:focus-visible,
 .pd-bb-btn:focus-visible,
 .pd-zoom-reset:focus-visible {
@@ -781,7 +775,7 @@ form.pd-needs-design .single_add_to_cart_button { opacity: .5; }
     font-weight: 700;
 }
 
-/* Dock jos: [Față | Spate] │ [● Alb ● Negru]. */
+/* Dock jos: [Față | Spate] │ [Mic | Mediu | Mare] │ [● Alb ● Negru]. */
 .pd-stage-dock {
     position: absolute;
     left: 50%;
@@ -789,8 +783,13 @@ form.pd-needs-design .single_add_to_cart_button { opacity: .5; }
     transform: translateX(-50%);
     z-index: 30;
     display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     align-items: center;
     gap: 6px;
+    /* Absolut + left: 50% ar limita lățimea la jumătate din scenă și ar rupe
+       dock-ul pe două rânduri pe mobil; max-content îl lasă cât conținutul. */
+    width: max-content;
     max-width: calc(100% - 32px);
     padding: 4px;
     box-sizing: border-box;
@@ -857,6 +856,37 @@ form.pd-needs-design .single_add_to_cart_button { opacity: .5; }
     line-height: 1;
 }
 .pd-side-tab__count[hidden] { display: none; }
+
+/* Mărimea imprimeului pe fața activă, cu ce adaugă la preț sub nume. */
+.pd-size-picker {
+    display: flex;
+    gap: 2px;
+}
+.pd-size-opt {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 58px;
+    height: 38px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--pd-text-muted);
+    font-family: inherit;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color .15s var(--pd-ease), color .15s var(--pd-ease);
+}
+.pd-size-opt__name { font-size: 13px; font-weight: 500; }
+.pd-size-opt__price { font-size: 10.5px; font-weight: 500; color: var(--pd-text-muted); }
+.pd-size-opt:hover:not(.is-active) { background: var(--pd-hover); color: var(--pd-text); }
+.pd-size-opt.is-active { background: #ececec; color: var(--pd-text); }
+.pd-size-opt.is-active .pd-size-opt__name { font-weight: 600; }
+.pd-size-opt.is-active .pd-size-opt__price { color: var(--pd-text); }
 
 .pd-color-swatches {
     display: flex;
@@ -985,12 +1015,13 @@ form.pd-needs-design .single_add_to_cart_button { opacity: .5; }
     .pd-print-info__extra,
     .pd-print-info__move { min-height: 26px; padding: 4px 10px; font-size: 11.5px; }
 
-    /* Dock-ul: doar culorile (Față / Spate e în bottom-bar). */
+    /* Dock-ul: mărimea imprimeului și culorile (Față / Spate e în bottom-bar). */
     .pd-stage-dock { bottom: 10px; max-width: calc(100% - 20px); }
-    .pd-stage-dock:not(.has-colors),
+    .pd-stage-dock:not(.has-colors):not(.has-sizes),
     .pd-stage-dock .pd-side-tabs,
-    .pd-stage-dock__sep { display: none; }
+    .pd-stage-dock__sep--sides { display: none; }
     .pd-color-swatch { height: 36px; }
+    .pd-size-opt { min-width: 52px; height: 40px; padding: 0 8px; }
 
     /* ----- Bottom-bar fix jos, cu safe-area ----- */
     .pd-bottom-bar {
@@ -1238,6 +1269,7 @@ form.pd-needs-design .single_add_to_cart_button { opacity: .5; }
     .pd-color-swatch,
     .pd-modal__close,
     .pd-side-tab,
+    .pd-size-opt,
     .pd-zoom-reset { touch-action: manipulation; }
 
     /* Cât timp un sheet e deschis, scroll-ul de fundal e blocat. */

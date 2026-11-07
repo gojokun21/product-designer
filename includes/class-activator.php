@@ -62,6 +62,13 @@ final class Activator {
             $done[] = 'template_enabled_backfill';
             update_option( self::OPTION_MIGRATIONS, array_values( array_unique( $done ) ) );
         }
+
+        // Print size per side, priced by the plugin instead of a variation
+        // attribute (2026-11). Retried on a later request when it can't run yet.
+        if ( ! in_array( 'print_sizes_per_side', $done, true ) && \ProductDesigner\Core\Print_Sizes_Migration::run() ) {
+            $done[] = 'print_sizes_per_side';
+            update_option( self::OPTION_MIGRATIONS, array_values( array_unique( $done ) ) );
+        }
     }
 
     /**

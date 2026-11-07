@@ -843,34 +843,14 @@ msgstr "Пожалуйста, персонализируйте товар пер
 msgid "Product Designer necesită WooCommerce activ."
 msgstr ""
 
-msgid "Alege mărimea imprimeului înainte de a salva designul."
-msgstr "Выберите размер принта перед сохранением дизайна."
-
 msgid "Trage cadrul unde vrei să fie imprimeul"
 msgstr "Перетащите рамку туда, где должен быть принт"
-
-msgid ""
-"Designul a fost salvat pentru altă mărime de imprimeu. Deschide editorul, "
-"verifică designul și salvează-l din nou."
-msgstr ""
-"Дизайн был сохранён для другого размера принта. Откройте редактор, проверьте"
-" дизайн и сохраните его снова."
-
-msgid "Imprimeu pe"
-msgstr "Принт на"
 
 msgid "Editează designul"
 msgstr "Изменить дизайн"
 
 msgid "Creează-ți designul, apoi îl poți adăuga în coș."
 msgstr "Создайте свой дизайн, после этого товар можно добавить в корзину."
-
-msgid ""
-"Ai schimbat mărimea imprimeului. Deschide editorul, verifică designul și "
-"salvează-l din nou."
-msgstr ""
-"Вы изменили размер принта. Откройте редактор, проверьте дизайн и сохраните "
-"его снова."
 
 msgid "Design salvat"
 msgstr "Дизайн сохранён"
@@ -885,14 +865,121 @@ msgstr ""
 msgid "Designul a fost micșorat ca să încapă în cadrul imprimeului ales."
 msgstr "Дизайн уменьшен, чтобы поместиться в рамку выбранного принта."
 
-#, php-format
-msgid "Prețul include imprimeul pe o parte. Față + spate: +%s"
-msgstr "Цена включает принт с одной стороны. Перед + спина: +%s"
-
-#, php-format
-msgid "Design pe față și spate: +%s la preț"
-msgstr "Дизайн спереди и на спине: +%s к цене"
-
 msgctxt "centimetri"
 msgid "cm"
 msgstr "см"
+
+#: includes/core/class-design-storage.php
+msgid "Mic"
+msgstr "Маленький"
+
+#: includes/core/class-design-storage.php
+msgid "Mediu"
+msgstr "Средний"
+
+#: includes/core/class-design-storage.php
+msgid "Mare"
+msgstr "Большой"
+
+#: includes/frontend/class-frontend.php
+msgid "Mărime imprimeu"
+msgstr "Размер принта"
+
+#. translators: a print size that adds nothing to the price
+#: includes/frontend/class-frontend.php
+msgid "inclus"
+msgstr "включено"
+
+#. translators: %s: what the print sizes add to the price
+#: includes/frontend/class-frontend.php
+msgid "Imprimeu: +%s la preț"
+msgstr "Принт: +%s к цене"
+
+#: includes/frontend/class-frontend.php
+msgid "Imprimeu față"
+msgstr "Принт спереди"
+
+#: includes/frontend/class-frontend.php
+msgid "Imprimeu spate"
+msgstr "Принт на спине"
+
+#: includes/frontend/class-frontend.php
+msgid "Total"
+msgstr "Итого"
+
+#: includes/woocommerce/class-cart.php includes/woocommerce/class-order.php
+msgid "Imprimeu"
+msgstr "Принт"
+
+#: includes/api/class-rest-api.php
+msgid "Alege mărimea imprimeului pentru fiecare parte cu design."
+msgstr "Выберите размер принта для каждой стороны с дизайном."
+
+#: includes/woocommerce/class-cart.php
+msgid ""
+"Mărimea imprimeului din design nu mai este disponibilă. Deschide editorul, "
+"alege mărimea și salvează designul din nou."
+msgstr ""
+"Размер принта в дизайне больше недоступен. Откройте редактор, выберите "
+"размер и сохраните дизайн заново."
+
+#: includes/admin/class-product-metabox.php
+msgid ""
+"Lățimea reală a zonei imprimabile de mai sus, în cm (ex. 28 pe tricou). Din "
+"ea se calculează cadrele. Goală = fără mărimi: cadrul e toată zona."
+msgstr ""
+
+#. translators: %s: currency symbol
+#: includes/admin/class-product-metabox.php
+msgid "Preț (+%s)"
+msgstr ""
+
+#. translators: %s: currency symbol
+#: includes/admin/class-product-metabox.php
+msgid "Spate, a doua imprimare (+%s)"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php
+msgid "Implicit față"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php
+msgid "Implicit spate"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php
+msgid ""
+"Clientul alege mărimea separat pentru față și pentru spate, în editor. "
+"Prețul variației include un imprimeu; „Preț\" e cât adaugă mărimea când e "
+"singurul imprimeu (sau pe față), iar „Spate, a doua imprimare\" e cât adaugă"
+" pe spate când există design și pe față. Un rând fără lățime și înălțime nu "
+"e oferit."
+msgstr ""
+
+#~ msgid "Alege mărimea imprimeului înainte de a salva designul."
+#~ msgstr "Выберите размер принта перед сохранением дизайна."
+
+#~ msgid ""
+#~ "Designul a fost salvat pentru altă mărime de imprimeu. Deschide editorul, "
+#~ "verifică designul și salvează-l din nou."
+#~ msgstr ""
+#~ "Дизайн был сохранён для другого размера принта. Откройте редактор, проверьте"
+#~ " дизайн и сохраните его снова."
+
+#~ msgid "Imprimeu pe"
+#~ msgstr "Принт на"
+
+#~ msgid ""
+#~ "Ai schimbat mărimea imprimeului. Deschide editorul, verifică designul și "
+#~ "salvează-l din nou."
+#~ msgstr ""
+#~ "Вы изменили размер принта. Откройте редактор, проверьте дизайн и сохраните "
+#~ "его снова."
+
+#, php-format
+#~ msgid "Prețul include imprimeul pe o parte. Față + spate: +%s"
+#~ msgstr "Цена включает принт с одной стороны. Перед + спина: +%s"
+
+#, php-format
+#~ msgid "Design pe față și spate: +%s la preț"
+#~ msgstr "Дизайн спереди и на спине: +%s к цене"

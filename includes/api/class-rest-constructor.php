@@ -201,10 +201,9 @@ final class Rest_Constructor {
 
         // Rezolvă mockup-ul pentru variația aleasă: per-culoare > per-variație >
         // mockup global de produs. Logica e centralizată în Design_Storage.
-        $config     = $this->storage->resolve_config_for_variation( $product_id, $variation_id );
-        $settings   = $this->validator->settings();
-        $product    = wc_get_product( $product_id );
-        $print_size = $this->storage->print_size_for_variation( $product_id, $variation_id );
+        $config   = $this->storage->resolve_config_for_variation( $product_id, $variation_id );
+        $settings = $this->validator->settings();
+        $product  = wc_get_product( $product_id );
 
         return new WP_REST_Response( [
             'rest' => [
@@ -221,9 +220,8 @@ final class Rest_Constructor {
                 'mockup_back_url'   => $config['mockup_back_url'],
                 'color_options'     => $this->storage->get_color_options( $product_id ),
                 'print_area'        => [ 'front' => $config['print_area']['front'] ?? null, 'back' => $config['print_area']['back'] ?? null ],
+                // Per-side print sizes are picked in the editor; it starts at `default`.
                 'print_sizes'       => $this->storage->print_sizes_for_editor( $product_id ),
-                // The chosen variation's print size: the editor frame starts at it.
-                'print_size'        => $print_size ? $print_size['slug'] : '',
                 'mockup_url'        => $config['mockup_front_url'], // legacy alias
                 'name'              => $product instanceof \WC_Product ? $product->get_name() : '',
                 'price_html'        => $product instanceof \WC_Product ? $product->get_price_html() : '',
@@ -300,11 +298,20 @@ final class Rest_Constructor {
             $vid       = (int) $v['variation_id'];
             $resolved  = $this->storage->resolve_config_for_variation( $product_id, $vid );
             $image_id  = (int) ( $v['image_id'] ?? 0 );
+            // WooCommerce leaves `price_html` empty when every variation costs
+            // the same (now the norm: the print size is no longer a variation).
+            $price_html = (string) ( $v['price_html'] ?? '' );
+            if ( $price_html === '' ) {
+                $variation  = wc_get_product( $vid );
+                $price_html = $variation instanceof \WC_Product ? $variation->get_price_html() : '';
+            }
 
             $variations[] = [
                 'id'               => $vid,
                 'attributes'       => $v['attributes'] ?? [],
-                'price_html'       => $v['price_html']  ?? '',
+                'price_html'       => $price_html,
+                // Numeric price, so the summary can add the print-size extra.
+                'price'            => (float) ( $v['display_price'] ?? 0 ),
                 'is_in_stock'      => ! empty( $v['is_in_stock'] ),
                 'is_purchasable'   => ! empty( $v['is_purchasable'] ),
                 'image_url'        => $image_id ? (string) wp_get_attachment_image_url( $image_id, 'large' ) : '',

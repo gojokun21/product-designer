@@ -592,10 +592,40 @@
     line-height: 1.45;
     color: var(--pd-text-muted);
 }
-.pd-summary .pd-summary__note--extra {
+/* Imprimeul pe fiecare față și totalul — două clase, ca tema să nu câștige
+   pe ul/li din .description_content. */
+.pd-summary .pd-summary__print {
+    margin: 12px 0 0;
+    padding: 10px 0 0;
+    border-top: 1px solid var(--pd-line);
+    list-style: none;
+}
+.pd-summary .pd-summary__print-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0;
+    padding: 3px 0;
+    font-size: 12.5px;
+    line-height: 1.4;
+    color: var(--pd-text-muted);
+}
+.pd-summary .pd-summary__print-line::before { content: none; }
+.pd-summary .pd-summary__print-amount {
+    flex: none;
+    font-weight: 600;
+    color: var(--pd-text);
+    white-space: nowrap;
+}
+.pd-summary .pd-summary__print-line--total {
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--pd-line);
+    font-size: 14px;
     font-weight: 600;
     color: var(--pd-text);
 }
+.pd-summary .pd-summary__print-line--total .pd-summary__print-amount { font-size: 15px; }
 .pd-summary__actions {
     display: flex;
     flex-direction: column;

@@ -167,88 +167,78 @@ final class Product_Metabox {
     }
 
     /**
-     * Print sizes section (variable products): which attribute holds the print
-     * sizes, the real width of the printable area, and per value the frame in
-     * cm, where it sits and what a second printed side costs.
+     * Print sizes section: the real width of the printable area and, per size
+     * (Mic / Mediu / Mare), the frame in cm, where it sits, what it adds to the
+     * price and which size each side starts at. The customer picks a size per
+     * side in the editor; see Design_Storage::print_price() for the price rule.
      */
     private function render_print_sizes_section( int $product_id, Design_Storage $storage ) : void {
-        $product = $product_id ? wc_get_product( $product_id ) : null;
-        if ( ! $product instanceof \WC_Product || ! $product->is_type( 'variable' ) ) {
-            return;
-        }
-        $attributes = $this->product_attributes_data( $product );
-        if ( empty( $attributes ) ) {
-            return;
-        }
-
-        $config  = $storage->get_print_sizes( $product_id );
-        $current = $config['attribute'];
-        $anchors = [
+        $config   = $storage->get_print_sizes( $product_id );
+        $currency = html_entity_decode( get_woocommerce_currency_symbol() );
+        $anchors  = [
             'top'    => __( 'Sus, centrat', 'product-designer' ),
             'chest'  => __( 'Piept stânga (pe spate: sus, centrat)', 'product-designer' ),
             'center' => __( 'Centru', 'product-designer' ),
         ];
+        $num = static function ( $size, string $key ) : string {
+            return $size ? (string) $size[ $key ] : '';
+        };
         ?>
         <div class="options_group pd-print-sizes-section">
             <p class="form-field">
-                <label for="pd_print_size_attr"><?php esc_html_e( 'Mărimi de imprimeu', 'product-designer' ); ?></label>
-                <select id="pd_print_size_attr" name="pd_print_sizes[attribute]" class="pd-print-size-attr-select">
-                    <option value=""><?php esc_html_e( '— Fără (cadrul e toată zona) —', 'product-designer' ); ?></option>
-                    <?php foreach ( $attributes as $attr ) : ?>
-                        <option value="<?php echo esc_attr( $attr['name'] ); ?>" <?php selected( $attr['name'], $current ); ?>>
-                            <?php echo esc_html( $attr['label'] ); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-                <span class="description"><?php esc_html_e( 'Atributul de variație ale cărui valori sunt mărimi de imprimeu. Editorul micșorează cadrul la mărimea aleasă de client.', 'product-designer' ); ?></span>
-            </p>
-            <p class="form-field">
-                <label for="pd_print_zone_width"><?php esc_html_e( 'Lățimea zonei imprimabile (cm)', 'product-designer' ); ?></label>
+                <label for="pd_print_zone_width"><?php esc_html_e( 'Mărimi de imprimeu', 'product-designer' ); ?></label>
                 <input type="number" step="0.1" min="0" id="pd_print_zone_width" name="pd_print_sizes[zone_width_cm]" value="<?php echo esc_attr( $config['zone_width_cm'] ? (string) $config['zone_width_cm'] : '' ); ?>" style="width:90px;" />
-                <span class="description"><?php esc_html_e( 'Lățimea reală a zonei imprimabile de mai sus (ex. 28 cm pe tricou). Din ea se calculează cadrele în cm.', 'product-designer' ); ?></span>
+                <span class="description"><?php esc_html_e( 'Lățimea reală a zonei imprimabile de mai sus, în cm (ex. 28 pe tricou). Din ea se calculează cadrele. Goală = fără mărimi: cadrul e toată zona.', 'product-designer' ); ?></span>
             </p>
 
-            <?php foreach ( $attributes as $attr ) : ?>
-                <div class="pd-print-sizes" data-attr="<?php echo esc_attr( $attr['name'] ); ?>" <?php echo $attr['name'] === $current ? '' : 'hidden'; ?>>
-                    <table class="widefat striped pd-print-sizes__table">
-                        <thead>
+            <div class="pd-print-sizes">
+                <table class="widefat striped pd-print-sizes__table">
+                    <thead>
+                        <tr>
+                            <th><?php esc_html_e( 'Mărime', 'product-designer' ); ?></th>
+                            <th><?php esc_html_e( 'Lățime (cm)', 'product-designer' ); ?></th>
+                            <th><?php esc_html_e( 'Înălțime (cm)', 'product-designer' ); ?></th>
+                            <th><?php esc_html_e( 'Poziție', 'product-designer' ); ?></th>
+                            <th><?php
+                                /* translators: %s: currency symbol */
+                                echo esc_html( sprintf( __( 'Preț (+%s)', 'product-designer' ), $currency ) );
+                            ?></th>
+                            <th><?php
+                                /* translators: %s: currency symbol */
+                                echo esc_html( sprintf( __( 'Spate, a doua imprimare (+%s)', 'product-designer' ), $currency ) );
+                            ?></th>
+                            <th><?php esc_html_e( 'Implicit față', 'product-designer' ); ?></th>
+                            <th><?php esc_html_e( 'Implicit spate', 'product-designer' ); ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ( Design_Storage::PRINT_SIZE_KEYS as $key ) :
+                            $size = $config['sizes'][ $key ] ?? null;
+                            $base = 'pd_print_sizes[sizes][' . $key . ']';
+                            ?>
                             <tr>
-                                <th><?php esc_html_e( 'Mărime', 'product-designer' ); ?></th>
-                                <th><?php esc_html_e( 'Lățime (cm)', 'product-designer' ); ?></th>
-                                <th><?php esc_html_e( 'Înălțime (cm)', 'product-designer' ); ?></th>
-                                <th><?php esc_html_e( 'Poziție', 'product-designer' ); ?></th>
-                                <th><?php
-                                    /* translators: %s: currency symbol */
-                                    echo esc_html( sprintf( __( 'Față + spate (+%s)', 'product-designer' ), html_entity_decode( get_woocommerce_currency_symbol() ) ) );
-                                ?></th>
+                                <td><strong><?php echo esc_html( Design_Storage::print_size_label( $key ) ); ?></strong></td>
+                                <td><input type="number" step="0.1" min="0" name="<?php echo esc_attr( $base . '[w]' ); ?>" value="<?php echo esc_attr( $num( $size, 'w' ) ); ?>" /></td>
+                                <td><input type="number" step="0.1" min="0" name="<?php echo esc_attr( $base . '[h]' ); ?>" value="<?php echo esc_attr( $num( $size, 'h' ) ); ?>" /></td>
+                                <td>
+                                    <select name="<?php echo esc_attr( $base . '[anchor]' ); ?>">
+                                        <?php foreach ( $anchors as $value => $label ) : ?>
+                                            <option value="<?php echo esc_attr( $value ); ?>" <?php selected( $value, $size ? $size['anchor'] : 'top' ); ?>><?php echo esc_html( $label ); ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </td>
+                                <td><input type="number" step="1" min="0" name="<?php echo esc_attr( $base . '[price]' ); ?>" value="<?php echo esc_attr( $num( $size, 'price' ) ); ?>" /></td>
+                                <td><input type="number" step="1" min="0" name="<?php echo esc_attr( $base . '[back_price]' ); ?>" value="<?php echo esc_attr( $num( $size, 'back_price' ) ); ?>" /></td>
+                                <td><input type="radio" name="pd_print_sizes[default][front]" value="<?php echo esc_attr( $key ); ?>" <?php checked( $config['default']['front'], $key ); ?> /></td>
+                                <td><input type="radio" name="pd_print_sizes[default][back]" value="<?php echo esc_attr( $key ); ?>" <?php checked( $config['default']['back'], $key ); ?> /></td>
                             </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ( $attr['options'] as $opt ) :
-                                $size = ( $attr['name'] === $current && isset( $config['sizes'][ $opt['value'] ] ) ) ? $config['sizes'][ $opt['value'] ] : null;
-                                $base = 'pd_print_size_rows[' . $attr['name'] . '][' . $opt['value'] . ']';
-                                ?>
-                                <tr>
-                                    <td><?php echo esc_html( $opt['label'] ); ?></td>
-                                    <td><input type="number" step="0.1" min="0" name="<?php echo esc_attr( $base . '[w]' ); ?>" value="<?php echo esc_attr( $size ? (string) $size['w'] : '' ); ?>" /></td>
-                                    <td><input type="number" step="0.1" min="0" name="<?php echo esc_attr( $base . '[h]' ); ?>" value="<?php echo esc_attr( $size ? (string) $size['h'] : '' ); ?>" /></td>
-                                    <td>
-                                        <select name="<?php echo esc_attr( $base . '[anchor]' ); ?>">
-                                            <?php foreach ( $anchors as $value => $label ) : ?>
-                                                <option value="<?php echo esc_attr( $value ); ?>" <?php selected( $value, $size ? $size['anchor'] : 'top' ); ?>><?php echo esc_html( $label ); ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </td>
-                                    <td><input type="number" step="1" min="0" name="<?php echo esc_attr( $base . '[second_side_price]' ); ?>" value="<?php echo esc_attr( $size ? (string) $size['second_side_price'] : '' ); ?>" /></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            <?php endforeach; ?>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
 
             <p class="description" style="padding:0 12px;">
-                <?php esc_html_e( 'Rândurile fără lățime și înălțime nu limitează cadrul. Prețul variației acoperă o singură parte; „Față + spate" se adaugă când clientul pune design pe ambele.', 'product-designer' ); ?>
+                <?php esc_html_e( 'Clientul alege mărimea separat pentru față și pentru spate, în editor. Prețul variației include un imprimeu; „Preț" e cât adaugă mărimea când e singurul imprimeu (sau pe față), iar „Spate, a doua imprimare" e cât adaugă pe spate când există design și pe față. Un rând fără lățime și înălțime nu e oferit.', 'product-designer' ); ?>
             </p>
         </div>
         <?php
@@ -459,24 +449,18 @@ final class Product_Metabox {
     }
 
     /**
-     * Persist the print sizes of the attribute selected in the UI; the other
-     * attributes' rows are only there for switching and are dropped.
+     * Persist the print sizes table. Design_Storage::sanitize_print_sizes()
+     * does the cleaning; an empty zone width or no usable row deletes the meta.
      */
     private function save_print_sizes( int $product_id, Design_Storage $storage ) : void {
-        // Secțiunea apare doar la produsele variabile; altfel nu atingem meta.
         if ( ! isset( $_POST['pd_print_sizes'] ) || ! is_array( $_POST['pd_print_sizes'] ) ) {
             return;
         }
-        $raw       = wp_unslash( $_POST['pd_print_sizes'] );
-        $attribute = sanitize_text_field( (string) ( $raw['attribute'] ?? '' ) );
-        $rows      = ( $attribute !== '' && isset( $_POST['pd_print_size_rows'][ $attribute ] ) && is_array( $_POST['pd_print_size_rows'][ $attribute ] ) )
-            ? wp_unslash( $_POST['pd_print_size_rows'][ $attribute ] )
-            : [];
-
+        $raw = wp_unslash( $_POST['pd_print_sizes'] );
         $storage->save_print_sizes( $product_id, [
-            'attribute'     => $attribute,
             'zone_width_cm' => $raw['zone_width_cm'] ?? 0,
-            'sizes'         => $rows,
+            'default'       => is_array( $raw['default'] ?? null ) ? $raw['default'] : [],
+            'sizes'         => is_array( $raw['sizes'] ?? null ) ? $raw['sizes'] : [],
         ] );
     }
 

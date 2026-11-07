@@ -741,3 +741,78 @@ msgstr ""
 msgid "Product Designer necesită WooCommerce activ."
 msgstr ""
 
+#: includes/core/class-design-storage.php
+msgid "Mic"
+msgstr ""
+
+#: includes/core/class-design-storage.php
+msgid "Mediu"
+msgstr ""
+
+#: includes/core/class-design-storage.php
+msgid "Mare"
+msgstr ""
+
+#: includes/frontend/class-frontend.php
+msgid "Mărime imprimeu"
+msgstr ""
+
+#. translators: a print size that adds nothing to the price
+#: includes/frontend/class-frontend.php
+msgid "inclus"
+msgstr ""
+
+#. translators: %s: what the print sizes add to the price
+#: includes/frontend/class-frontend.php
+msgid "Imprimeu: +%s la preț"
+msgstr ""
+
+#: includes/frontend/class-frontend.php
+msgid "Imprimeu față"
+msgstr ""
+
+#: includes/frontend/class-frontend.php
+msgid "Imprimeu spate"
+msgstr ""
+
+#: includes/frontend/class-frontend.php
+msgid "Total"
+msgstr ""
+
+#: includes/woocommerce/class-cart.php includes/woocommerce/class-order.php
+msgid "Imprimeu"
+msgstr ""
+
+#: includes/api/class-rest-api.php
+msgid "Alege mărimea imprimeului pentru fiecare parte cu design."
+msgstr ""
+
+#: includes/woocommerce/class-cart.php
+msgid "Mărimea imprimeului din design nu mai este disponibilă. Deschide editorul, alege mărimea și salvează designul din nou."
+msgstr ""
+
+#: includes/admin/class-product-metabox.php
+msgid "Lățimea reală a zonei imprimabile de mai sus, în cm (ex. 28 pe tricou). Din ea se calculează cadrele. Goală = fără mărimi: cadrul e toată zona."
+msgstr ""
+
+#. translators: %s: currency symbol
+#: includes/admin/class-product-metabox.php
+msgid "Preț (+%s)"
+msgstr ""
+
+#. translators: %s: currency symbol
+#: includes/admin/class-product-metabox.php
+msgid "Spate, a doua imprimare (+%s)"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php
+msgid "Implicit față"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php
+msgid "Implicit spate"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php
+msgid "Clientul alege mărimea separat pentru față și pentru spate, în editor. Prețul variației include un imprimeu; „Preț\" e cât adaugă mărimea când e singurul imprimeu (sau pe față), iar „Spate, a doua imprimare\" e cât adaugă pe spate când există design și pe față. Un rând fără lățime și înălțime nu e oferit."
+msgstr ""
