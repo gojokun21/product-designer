@@ -57,6 +57,10 @@ final class Rest_Api {
                 // `preview` may be a string (legacy v1) or object {front, back} (v2).
                 // No `type` constraint here — REST schema would otherwise reject one of them.
                 'preview'    => [ 'required' => true ],
+                // Optional custom mockup tint chosen in the editor ('' = original).
+                'mockup_color' => [ 'required' => false, 'type' => 'string' ],
+                // Optional print size + per-side frames: { size, frames: { front, back } }.
+                'print'        => [ 'required' => false, 'type' => 'object' ],
             ],
         ] );
 
@@ -101,6 +105,10 @@ final class Rest_Api {
             return new WP_Error( 'pd_product_invalid', __( 'Produs invalid sau designer dezactivat.', 'product-designer' ), [ 'status' => 400 ] );
         }
 
+        // Feature-ul de tenta custom a fost inlocuit cu mockup-uri per culoare;
+        // parametrul ramane acceptat pentru compatibilitate, dar nu se persista.
+        $mockup_color = Validator::sanitize_hex( (string) $request->get_param( 'mockup_color' ) );
+
         $payload = [
             'design'  => $request->get_param( 'design' ),
             'preview' => $request->get_param( 'preview' ),
@@ -110,7 +118,16 @@ final class Rest_Api {
             return new WP_Error( 'pd_design_invalid', $check['error'] ?? '', [ 'status' => 400 ] );
         }
 
-        $persisted = $this->storage->persist_submission( $product_id, $check['design'], $check['preview'] );
+        // A product with print sizes needs to know which one the design was made
+        // for: the cart refuses a design saved for another print size.
+        $print = $this->storage->sanitize_print_details( $product_id, $request->get_param( 'print' ) );
+        if ( ! $print && $this->storage->get_print_sizes( $product_id )['sizes'] ) {
+            return new WP_Error( 'pd_print_size_missing', __( 'Alege mărimea imprimeului înainte de a salva designul.', 'product-designer' ), [ 'status' => 400 ] );
+        }
+
+        // The custom mockup-tint feature was removed in favour of per-color
+        // mockup images; designs no longer carry a tint color.
+        $persisted = $this->storage->persist_submission( $product_id, $check['design'], $check['preview'], '', $print );
         if ( empty( $persisted['ok'] ) ) {
             return new WP_Error( 'pd_persist_failed', $persisted['error'] ?? '', [ 'status' => 500 ] );
         }
@@ -137,6 +154,8 @@ final class Rest_Api {
                     'preview_url'      => $persisted['preview_url'],
                     'preview_back_url' => $persisted['preview_back_url'] ?? '',
                     'json_url'         => $persisted['json_url'],
+                    'mockup_color'     => $mockup_color,
+                    'print_size'       => $persisted['print_size'],
                     'saved_at'         => time(),
                 ] );
                 // Save imediat în DB, nu aștepta shutdown.
@@ -172,6 +191,8 @@ final class Rest_Api {
             'preview_url'      => $persisted['preview_url'],
             'preview_back_url' => $persisted['preview_back_url'] ?? '',
             'json_url'         => $persisted['json_url'],
+            'mockup_color'     => $mockup_color,
+            'print_size'       => $persisted['print_size'],
             'session_saved'    => $session_saved,
         ], 201 );
     }

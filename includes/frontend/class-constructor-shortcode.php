@@ -10,13 +10,21 @@
 
 namespace ProductDesigner\Frontend;
 
+use ProductDesigner\Core\I18n_Polylang;
 use ProductDesigner\Core\Validator;
+use ProductDesigner\Core\Vite;
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
 final class Constructor_Shortcode {
+
+    private Vite $vite;
+
+    public function __construct( Vite $vite ) {
+        $this->vite = $vite;
+    }
 
     public function register() : void {
         add_shortcode( PD_CONSTRUCTOR_SHORTCODE, [ $this, 'render' ] );
@@ -28,53 +36,26 @@ final class Constructor_Shortcode {
             return;
         }
 
-        // Cache-busting via filemtime.
-        $css_ver_designer    = self::asset_version( 'assets/css/designer.css' );
-        $css_ver_constructor = self::asset_version( 'assets/css/constructor.css' );
-        $js_ver_designer     = self::asset_version( 'assets/js/designer.js' );
-        $js_ver_constructor  = self::asset_version( 'assets/js/constructor.js' );
+        // jQuery stays a dep for WC events consumed by the editor (parity with Flow A).
+        $this->vite->enqueue_entry( 'src/main-constructor.js', 'constructor', [ 'jquery' ] );
+    }
 
-        wp_enqueue_style(
-            'pd-designer',
-            PD_PLUGIN_URL . 'assets/css/designer.css',
-            [],
-            $css_ver_designer
-        );
-        wp_enqueue_style(
-            'pd-constructor',
-            PD_PLUGIN_URL . 'assets/css/constructor.css',
-            [ 'pd-designer' ],
-            $css_ver_constructor
-        );
-
-        wp_enqueue_script(
-            'pd-fabric',
-            PD_PLUGIN_URL . 'assets/vendor/fabric.min.js',
-            [],
-            '5.3.1',
-            true
-        );
-        wp_enqueue_script(
-            'pd-designer',
-            PD_PLUGIN_URL . 'assets/js/designer.js',
-            [ 'jquery', 'pd-fabric' ],
-            $js_ver_designer,
-            true
-        );
-        wp_enqueue_script(
-            'pd-constructor',
-            PD_PLUGIN_URL . 'assets/js/constructor.js',
-            [ 'jquery', 'pd-designer' ],
-            $js_ver_constructor,
-            true
-        );
-
-        // Bootstrap minim pentru constructor.js — restul vine dinamic via REST.
+    /**
+     * PDConstructorData-shaped bootstrap consumed by ConstructorApp via the
+     * mount root `data-pd-config` attribute. Per-product editor configs are
+     * still fetched at runtime from `constructor/product-config`.
+     */
+    private function build_bootstrap() : array {
         $validator = new Validator();
-        wp_localize_script( 'pd-constructor', 'PDConstructorData', [
+        return [
+            'title' => $this->get_settings()['title'] ?? __( 'Constructor produse', 'product-designer' ),
             'rest' => [
                 'root'  => esc_url_raw( rest_url( PD_REST_NS . '/' ) ),
                 'nonce' => wp_create_nonce( 'wp_rest' ),
+                // Polylang nu deduce limba unui request REST din referer: o ia
+                // exclusiv din parametrul lang (PLL_REST_Request::set_language).
+                // Fara el, wizard-ul din /ru/ ar lista template-urile romanesti.
+                'lang'  => I18n_Polylang::current_lang(),
             ],
             'cart' => [
                 'addToCartUrl' => esc_url_raw( wc_get_cart_url() ),
@@ -90,6 +71,8 @@ final class Constructor_Shortcode {
                 'addToCart'     => __( 'Adaugă în coș',                    'product-designer' ),
                 'changeCat'     => __( 'Schimbă categoria',                'product-designer' ),
                 'changeProduct' => __( 'Schimbă produsul',                 'product-designer' ),
+                'changeOptions' => __( 'Schimbă opțiunile',                'product-designer' ),
+                'unavailable'   => __( 'Combinația aleasă nu este disponibilă. Alege alte opțiuni.', 'product-designer' ),
                 'productsCount' => __( '%d produse',                       'product-designer' ),
                 'productCount1' => __( '1 produs',                         'product-designer' ),
                 'loading'       => __( 'Se încarcă...',                    'product-designer' ),
@@ -97,9 +80,21 @@ final class Constructor_Shortcode {
                 'errorLoad'     => __( 'Eroare la încărcare. Reîncearcă.', 'product-designer' ),
                 'saveFirst'     => __( 'Salvează designul înainte de a-l adăuga în coș.', 'product-designer' ),
                 'addingToCart'  => __( 'Se adaugă în coș...',              'product-designer' ),
-                'designerWaitMockup' => __( 'Aștept mockup...',            'product-designer' ),
+                'sideFront'     => __( 'Față',                             'product-designer' ),
+                'sideBack'      => __( 'Spate',                            'product-designer' ),
+                'addText'       => __( 'Adaugă text',                      'product-designer' ),
+                'uploadImg'     => __( 'Încarcă imagine',                  'product-designer' ),
+                'delete'        => __( 'Șterge selecția',                  'product-designer' ),
+                'uploading'     => __( 'Se încarcă...',                    'product-designer' ),
+                'saving'        => __( 'Se salvează...',                   'product-designer' ),
+                'savedOk'       => __( 'Design salvat.',                   'product-designer' ),
+                'tooLarge'      => __( 'Fișier prea mare.',                'product-designer' ),
+                'badType'       => __( 'Tip neacceptat.',                  'product-designer' ),
+                'empty'         => __( 'Adaugă cel puțin un element în design.', 'product-designer' ),
+                'productColor'      => __( 'Culoare produs',    'product-designer' ),
+                'productColorReset' => __( 'Culoare originală', 'product-designer' ),
             ],
-        ] );
+        ];
     }
 
     public function render( $atts = [], $content = null ) : string {
@@ -120,7 +115,7 @@ final class Constructor_Shortcode {
 
         ob_start();
         // Variables disponibile în template:
-        $constructor_title = $this->get_settings()['title'] ?? __( 'Constructor produse', 'product-designer' );
+        $pd_bootstrap = $this->build_bootstrap();
         include $template_path;
         return (string) ob_get_clean();
     }

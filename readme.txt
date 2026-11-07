@@ -1,4 +1,4 @@
-=== Product Designer for WooCommerce ===
+=== Midy Product Designer ===
 Contributors: yourname
 Tags: woocommerce, product designer, customization, fabric.js, print-on-demand
 Requires at least: 6.0

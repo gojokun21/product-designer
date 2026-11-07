@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class Deactivator {
 
     public static function deactivate() : void {
-        // Reserved for future scheduled cleanup / transient flush.
+        wp_unschedule_hook( \ProductDesigner\Core\Cleanup::CRON_HOOK );
         wp_cache_flush();
     }
 }

@@ -12,6 +12,62 @@
 .pd-constructor[aria-busy="true"] { cursor: wait; }
 .pd-constructor[aria-busy="true"] * { pointer-events: none; }
 
+/* Step 3 (designer) — pe desktop folosim FULL VIEWPORT (position: fixed inset 0).
+   Asta elimină:
+   - Constrângerea de parent container (.entry-content / theme wrappers care au max-width).
+   - Padding-ul mare al .pd-constructor (24+60 = 84px chrome).
+   - Header-ul cu progress steps (consumă ~80px vertical fără valoare în designer mode).
+   Layout-ul devine: slim top bar (~50px) | designer (umple restul, ~100dvh - 50px).
+   Pe 1080: 1030px height pentru mockup → mockup portrait 6/7 = 883×1030 (de la 797×930).
+   E pattern-ul standard pentru design tools (Canva, Figma, Photopea). */
+.pd-constructor[data-step="3"] {
+    position: fixed;
+    inset: 0;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    /* z-index 100000 = peste WP admin bar (99999) → designer ocupă full viewport
+       fără ca admin bar să acopere top 32px. Match cu .pd-modal z-index. */
+    z-index: 100000;
+    background: #f4f4f4;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100dvh;
+    overflow: hidden;
+}
+@supports not (height: 100dvh) {
+    .pd-constructor[data-step="3"] {
+        height: calc(var(--pd-vh, 1vh) * 100);
+    }
+}
+
+/* Big page header (titlu + progress steps) — ascuns când e activ step 3.
+   În locul lui apare slim top bar (.pd-step3-bar — vezi mai jos pe desktop). */
+.pd-constructor[data-step="3"] > .pd-constructor__header {
+    display: none;
+}
+
+/* Pașii 1, 2, 2.5 — ascunși când step 3 e activ (sunt deja hidden via JS,
+   dar dacă vreun panel are bg moștenit, asta îl ascunde garantat). */
+.pd-constructor[data-step="3"] .pd-constructor__panel:not([data-panel="3"]) {
+    display: none;
+}
+
+/* Panel 3 ocupă restul (grid row 2). Padding compact pentru max viewport. */
+.pd-constructor[data-step="3"] .pd-constructor__panel[data-panel="3"] {
+    grid-row: 2;
+    padding: 12px 20px 16px;
+    overflow: hidden;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Breadcrumb-ul interior din panel 3 — ascuns pe desktop (înlocuit de step3-bar). */
+.pd-constructor[data-step="3"] .pd-constructor__panel[data-panel="3"] .pd-breadcrumb {
+    display: none;
+}
+
 /* Header + progress */
 .pd-constructor__header {
     margin-bottom: 24px;
@@ -263,13 +319,15 @@
     gap: 16px;
     align-items: stretch;
     /* Hard-cap 900px ELIMINAT — pe ecrane mari (4K, 1440p) folosim toată
-       înălțimea utilă a viewport-ului. Wrap-ul își ia aspect-ul mockup-ului →
-       crește proporțional, fără jank. min 480px ca să nu fie spăimos pe laptop-uri. */
-    height: max(480px, calc(var(--pd-vh, 1vh) * 100 - 180px));
+       înălțimea utilă a viewport-ului. Rezerva 150px = breadcrumb (~28) +
+       step3-padding (~24) + admin-bar/header (~32) + page-padding (~24) +
+       safety (~42). Min 540px pentru viewport-uri mici (1024×768 cu chrome).
+       Wrap-ul își ia aspect-ul mockup-ului → crește proporțional, fără jank. */
+    height: max(540px, calc(var(--pd-vh, 1vh) * 100 - 150px));
 }
 @supports (height: 100dvh) {
     .pd-designer-layout {
-        height: max(480px, calc(100dvh - 180px));
+        height: max(540px, calc(100dvh - 150px));
     }
 }
 .pd-designer-layout .pd-tools {
@@ -289,10 +347,65 @@
 }
 
 /* ==========================================================================
-   Slim sticky bar pentru pasul 3 pe mobile
-   (înlocuiește header-ul mare + breadcrumb-ul)
+   Slim sticky bar pentru pasul 3 — afișat pe AMBELE platforme acum
+   (desktop full-viewport + mobile full-viewport).
+   Înlocuiește header-ul mare + breadcrumb-ul.
    ========================================================================== */
 .pd-step3-bar { display: none; }
+
+/* Pe desktop la step 3 (position: fixed) — afișează slim top bar.
+   Mobile-ul are propria regulă în @media (max-width: 900px) cu compact styling. */
+.pd-constructor[data-step="3"] .pd-step3-bar {
+    display: flex;
+    grid-row: 1;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 24px;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    z-index: 60;
+}
+.pd-constructor[data-step="3"] .pd-step3-bar__back {
+    background: none;
+    border: 0;
+    font-size: 22px;
+    line-height: 1;
+    padding: 0;
+    min-width: 40px;
+    min-height: 40px;
+    cursor: pointer;
+    color: #222;
+    font-family: inherit;
+    border-radius: 8px;
+}
+.pd-constructor[data-step="3"] .pd-step3-bar__back:hover { background: #f0f3f7; }
+.pd-constructor[data-step="3"] .pd-step3-bar__title {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 600;
+    color: #111;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 0 4px;
+}
+/* Save button în step3-bar e ascuns pe desktop — Save e în .pd-summary (Adaugă în coș).
+   Wrappat în desktop-only media ca să NU acoperim regula mobile (unde Save e vizibil în top bar). */
+@media (min-width: 901px) {
+    .pd-constructor[data-step="3"] .pd-step3-bar__save {
+        display: none;
+    }
+}
+
+/* Designer layout în interiorul panel-ului 3 (display: flex column) — flex: 1 ca să umple
+   spațiul rămas după breadcrumb-ul ascuns. height: auto + max-height: none anulează cap-urile
+   moștenite. */
+.pd-constructor[data-step="3"] .pd-designer-layout {
+    flex: 1;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+}
 
 /* Summary sidebar */
 .pd-summary {

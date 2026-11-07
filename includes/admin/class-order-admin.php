@@ -39,6 +39,7 @@ final class Order_Admin {
         $design_id          = (string) $item->get_meta( Design_Storage::ITEM_META_DESIGN_ID, true );
         $preview_front      = (string) $item->get_meta( Design_Storage::ITEM_META_PREVIEW_URL, true );
         $preview_back       = (string) $item->get_meta( Design_Storage::ITEM_META_PREVIEW_BACK_URL, true );
+        $mockup_color       = (string) $item->get_meta( Design_Storage::ITEM_META_MOCKUP_COLOR, true );
 
         // DIAGNOSTIC: produsul are designer activat, dar nu există design_id
         // pe acest item. Înseamnă că fluxul cart→order s-a rupt.
@@ -70,6 +71,37 @@ final class Order_Admin {
                 <strong><?php esc_html_e( 'Design personalizat', 'product-designer' ); ?></strong>
                 <code class="pd-order-design__id"><?php echo esc_html( $design_id ); ?></code>
             </div>
+
+            <?php
+            $print  = is_array( $design ) && isset( $design['print'] ) && is_array( $design['print'] ) ? $design['print'] : null;
+            $frames = $print && isset( $print['frames'] ) && is_array( $print['frames'] ) ? $print['frames'] : [];
+            if ( $print ) :
+                $attribute = $this->storage->get_print_sizes( $product_id )['attribute'];
+                $size_term = $attribute !== '' ? get_term_by( 'slug', (string) $print['size'], $attribute ) : null;
+                ?>
+                <p class="pd-order-design__print">
+                    <strong><?php esc_html_e( 'Imprimeu:', 'product-designer' ); ?></strong>
+                    <?php echo esc_html( $size_term instanceof \WP_Term ? $size_term->name : (string) $print['size'] ); ?>
+                    <?php foreach ( [ 'front' => __( 'Față', 'product-designer' ), 'back' => __( 'Spate', 'product-designer' ) ] as $side => $side_label ) :
+                        if ( empty( $frames[ $side ] ) || ( $side === 'front' ? ! $preview_front : ! $preview_back ) ) {
+                            continue;
+                        }
+                        ?>
+                        <span class="pd-muted">
+                            — <?php echo esc_html( sprintf( '%s: %s × %s cm', $side_label, $frames[ $side ]['w_cm'], $frames[ $side ]['h_cm'] ) ); ?>
+                        </span>
+                    <?php endforeach; ?>
+                </p>
+            <?php endif; ?>
+
+            <?php if ( $mockup_color !== '' ) : ?>
+                <p class="pd-order-design__color">
+                    <strong><?php esc_html_e( 'Culoare produs (aleasă de client):', 'product-designer' ); ?></strong>
+                    <span class="pd-color-swatch" style="background:<?php echo esc_attr( $this->normalize_color( $mockup_color ) ); ?>;"></span>
+                    <code><?php echo esc_html( $this->normalize_color( $mockup_color ) ); ?></code>
+                    <span class="pd-muted"><?php esc_html_e( '— preview-urile de mai jos au culoarea deja aplicată.', 'product-designer' ); ?></span>
+                </p>
+            <?php endif; ?>
 
             <p class="pd-order-links">
                 <?php if ( $preview_front ) : ?>

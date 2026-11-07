@@ -64,29 +64,35 @@
     var activeSide = 'front';
     var availableSides = ['front']; // setat la boot din PDData
 
+    // Culoarea custom a mockup-ului ('' = mockup original, fără tint).
+    // Aplicată ca filtru BlendColor multiply pe imaginea de mockup a AMBELOR
+    // părți, deci e baked în preview-ul PNG exportat la save.
+    var mockupColor = '';
+
     // Selectorii sunt re-cache-uiți la fiecare boot.
-    var $modal, $status, $deleteBtn, $hiddenId, $hiddenPng, $hiddenPngBack, $hiddenJson, $selPrev;
+    var $modal, $status, $deleteBtn, $hiddenId, $hiddenPng, $hiddenPngBack, $hiddenJson, $hiddenMockupColor, $selPrev;
     var $textCtrls, $textColor, $textSize, $textFont, $textBold, $textItalic, $textUnderline, $textAlign;
     var $sideTabs;
 
     function cacheSelectors() {
-        $modal         = $('.pd-modal');
-        $status        = $('.pd-status');
-        $deleteBtn     = $('.pd-delete');
-        $hiddenId      = $('.pd-design-id');
-        $hiddenPng     = $('.pd-preview-url');
-        $hiddenPngBack = $('.pd-preview-back-url');
-        $hiddenJson    = $('.pd-json-url');
-        $selPrev       = $('.pd-selected-preview');
-        $textCtrls     = $('.pd-text-controls');
-        $textColor     = $('.pd-text-color');
-        $textSize      = $('.pd-text-size');
-        $textFont      = $('.pd-text-font');
-        $textBold      = $('.pd-text-bold');
-        $textItalic    = $('.pd-text-italic');
-        $textUnderline = $('.pd-text-underline');
-        $textAlign     = $('.pd-text-align');
-        $sideTabs      = $('.pd-side-tabs');
+        $modal             = $('.pd-modal');
+        $status            = $('.pd-status');
+        $deleteBtn         = $('.pd-delete');
+        $hiddenId          = $('.pd-design-id');
+        $hiddenPng         = $('.pd-preview-url');
+        $hiddenPngBack     = $('.pd-preview-back-url');
+        $hiddenJson        = $('.pd-json-url');
+        $hiddenMockupColor = $('.pd-mockup-color-value');
+        $selPrev           = $('.pd-selected-preview');
+        $textCtrls         = $('.pd-text-controls');
+        $textColor         = $('.pd-text-color');
+        $textSize          = $('.pd-text-size');
+        $textFont          = $('.pd-text-font');
+        $textBold          = $('.pd-text-bold');
+        $textItalic        = $('.pd-text-italic');
+        $textUnderline     = $('.pd-text-underline');
+        $textAlign         = $('.pd-text-align');
+        $sideTabs          = $('.pd-side-tabs');
     }
     cacheSelectors();
 
@@ -251,7 +257,7 @@
             $('.pd-bb-delete').prop('disabled', true);
             $('.pd-bb-edit-text').prop('hidden', true);
             $textCtrls.prop('hidden', true).removeClass('is-open');
-            // Dacă bottom-sheet-ul de text era deschis, închide-l curat.
+            // Dacă sheet-ul de text era deschis, închide-l curat.
             if (isMobile()) { closeSheet('text'); }
         });
 
@@ -329,6 +335,10 @@
             c.add(fImg);
             c.sendToBack(fImg);
 
+            // Dacă user-ul a ales deja o culoare (ex. mockup-ul de spate se
+            // încarcă după ce front-ul a fost tintat), aplic-o și aici.
+            if (mockupColor) { applyMockupTint(side); }
+
             if (side === activeSide) {
                 fitCanvasToWrap(w, h);
                 scheduleRefit();
@@ -342,6 +352,93 @@
             if (canvases[side]) { canvases[side].renderAll(); }
         };
         native.src = url;
+    }
+
+    // ==========================================================================
+    // Custom mockup color (tint)
+    // ==========================================================================
+
+    function isCustomColorEnabled() {
+        return !!(PDData && PDData.product && PDData.product.custom_color_enabled);
+    }
+
+    function mockupImageOf(side) {
+        var c = canvases[side];
+        if (!c) { return null; }
+        var objs = c.getObjects();
+        for (var i = 0; i < objs.length; i++) {
+            if (objs[i].pdMockup) { return objs[i]; }
+        }
+        return null;
+    }
+
+    function applyMockupTint(side) {
+        var c   = canvases[side];
+        var img = mockupImageOf(side);
+        if (!c || !img) { return; }
+        img.filters = mockupColor
+            ? [new fabric.Image.filters.BlendColor({ color: mockupColor, mode: 'multiply' })]
+            : [];
+        try {
+            img.applyFilters();
+        } catch (err) {
+            // Canvas tainted (mockup cross-origin fără CORS) sau backend filter
+            // indisponibil — lăsăm mockup-ul original în loc să rupem editorul.
+            console.error('[PD] Tint mockup a eșuat (' + side + '):', err);
+            img.filters = [];
+            mockupColor = '';
+        }
+        c.requestRenderAll();
+    }
+
+    // rAF-throttle: <input type=color> emite `input` continuu în timpul drag-ului
+    // pe picker; filtrul pe un mockup de ~2000px nu trebuie rulat la fiecare event.
+    var tintRafPending = false;
+    function setMockupColor(color) {
+        mockupColor = (typeof color === 'string') ? color : '';
+        if (tintRafPending) { return; }
+        tintRafPending = true;
+        var raf = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
+        raf(function () {
+            tintRafPending = false;
+            SIDES.forEach(applyMockupTint);
+            updateMockupColorUI();
+        });
+    }
+
+    function updateMockupColorUI() {
+        var $ctrl = $('.pd-mockup-color-ctrl');
+        if (!$ctrl.length) { return; }
+        var $swatch = $ctrl.find('.pd-mockup-color-ctrl__swatch');
+        if (mockupColor) {
+            $swatch.removeClass('is-unset').css('background', mockupColor);
+        } else {
+            $swatch.addClass('is-unset').css('background', '');
+        }
+        $ctrl.find('.pd-mockup-color-reset').prop('hidden', !mockupColor);
+    }
+
+    function applyMockupColorVisibility() {
+        $('.pd-mockup-color-ctrl').prop('hidden', !isCustomColorEnabled());
+    }
+
+    /**
+     * Culoarea de tint pentru un set de atribute de variație
+     * ({attribute_pa_culoare: 'negru'} → '#000000'), pe baza hărții
+     * PDData.product.variation_colors construită server-side din swatch-uri.
+     */
+    function variationColorFromAttrs(attrs) {
+        var map = PDData && PDData.product && PDData.product.variation_colors;
+        if (!map || !attrs) { return ''; }
+        for (var key in attrs) {
+            if (!Object.prototype.hasOwnProperty.call(attrs, key)) { continue; }
+            var attrName = key.indexOf('attribute_') === 0 ? key.substring(10) : key;
+            var slug = attrs[key];
+            if (slug && map[attrName] && map[attrName][slug]) {
+                return map[attrName][slug];
+            }
+        }
+        return '';
     }
 
     // ==========================================================================
@@ -693,9 +790,15 @@
 
         var isText = isTextObject(obj);
         // Bottom-bar: arată/ascunde butonul "Editează text" când există i-text selectat.
-        // NU deschidem sheet-ul automat — strica UX-ul: user-ul vrea să mute/tasteze
-        // în text, nu să formateze. Dacă vrea formatare, apasă explicit "Editează".
+        // Formatarea (.pd-text-controls) NU se deschide automat — doar la "Editează".
         $('.pd-bb-edit-text').prop('hidden', !isText);
+
+        // Pe mobil, la tap pe text deschidem panoul de text complet (conținut +
+        // formatare: culoare, font, mărime). syncTextControls a populat deja toate
+        // câmpurile, inclusiv textarea de conținut.
+        if (isMobile() && isText) {
+            openSheet('text');
+        }
     }
 
     function isTextObject(obj) {
@@ -708,6 +811,7 @@
             return;
         }
         $textCtrls.prop('hidden', false);
+        $('.pd-text-value').val(obj.text || '');
         $textColor.val(normalizeColor(obj.fill) || '#111111');
         $textSize.val(Math.round(obj.fontSize || 48));
         $textFont.val(obj.fontFamily || 'Arial');
@@ -775,11 +879,18 @@
                 fontStyle: $textItalic.hasClass('is-active') ? 'italic' : 'normal',
                 underline: $textUnderline.hasClass('is-active'),
                 originX: 'left',
-                originY: 'top'
+                originY: 'top',
+                // Pe mobil dezactivăm editarea inline (double-tap) — conținutul se
+                // editează din textarea (.pd-text-value) din sheet-ul de text.
+                editable: !isMobile()
             });
             c.add(t);
             c.setActiveObject(t);
             c.requestRenderAll();
+            // Pe mobil, intenția la "Adaugă text" e clară: focalizează textarea casetuței.
+            if (isMobile()) {
+                setTimeout(function () { $('.pd-text-value').trigger('focus').trigger('select'); }, 50);
+            }
             if (window.console) { console.log('[PD] Text adăugat (' + activeSide + '):', { left: t.left, top: t.top, fontSize: fontSize }); }
         } catch (err) {
             console.error('[PD] addText a eșuat:', err);
@@ -918,13 +1029,15 @@
             data: JSON.stringify({
                 product_id: PDData.product.id,
                 design: design,
-                preview: preview
+                preview: preview,
+                mockup_color: isCustomColorEnabled() ? mockupColor : ''
             })
         }).done(function (res) {
             $hiddenId.val(res.design_id);
             $hiddenPng.val(res.preview_url || '');
             $hiddenPngBack.val(res.preview_back_url || '');
             $hiddenJson.val(res.json_url);
+            if ($hiddenMockupColor.length) { $hiddenMockupColor.val(res.mockup_color || ''); }
             // Preview thumbnail în UI: arată față dacă există, altfel spate.
             var thumb = res.preview_url || res.preview_back_url || '';
             if (thumb) {
@@ -1021,10 +1134,42 @@
         this.value = '';
     });
 
+    // ---- Custom mockup color ----
+    $(document).on('input change', '.pd-mockup-color', function () {
+        setMockupColor(this.value);
+    });
+    $(document).on('click', '.pd-mockup-color-reset', function (e) {
+        e.preventDefault();
+        setMockupColor('');
+    });
+
+    // ---- Tint automat din variația selectată (Flow A, pagina de produs) ----
+    // Evenimentele WC bubble de pe form.variations_form; clientul alege „Negru"
+    // din swatch-uri → mockup-ul din editor se recolorează singur. Alegerea
+    // manuală din picker rămâne posibilă peste (o suprascrie pe cea automată).
+    $(document.body).on('found_variation', 'form.variations_form', function (e, variation) {
+        if (!isCustomColorEnabled() || !variation || !variation.attributes) { return; }
+        var hex = variationColorFromAttrs(variation.attributes);
+        $('.pd-mockup-color').val(hex || '#ffffff');
+        setMockupColor(hex);
+    });
+    $(document.body).on('reset_data', 'form.variations_form', function () {
+        if (!isCustomColorEnabled()) { return; }
+        $('.pd-mockup-color').val('#ffffff');
+        setMockupColor('');
+    });
+
     $(document).on('click', '.pd-clear-design', function (e) {
         e.preventDefault();
         $hiddenId.val(''); $hiddenPng.val(''); $hiddenPngBack.val(''); $hiddenJson.val('');
+        if ($hiddenMockupColor.length) { $hiddenMockupColor.val(''); }
         $selPrev.prop('hidden', true).find('img').attr('src', '');
+    });
+
+    // --- Text content wiring (textarea .pd-text-value din panoul de text) ---
+    $(document).on('input', '.pd-text-value', function () {
+        var val = this.value;
+        applyToActiveText(function (obj) { obj.set('text', val); });
     });
 
     // --- Text controls wiring ---
@@ -1087,6 +1232,15 @@
         resizeTimer = setTimeout(function () {
             fitCanvasToWrap();
             updateZoomResetVisibility(activeCanvas());
+            // Sincronizează editarea inline la trecerea peste pragul mobil/desktop.
+            var mobile = isMobile();
+            ['front', 'back'].forEach(function (s) {
+                var cv = canvases[s];
+                if (!cv) { return; }
+                cv.getObjects().forEach(function (o) {
+                    if (isTextObject(o)) { o.editable = !mobile; }
+                });
+            });
         }, 120);
     });
 
@@ -1129,6 +1283,7 @@
         data.pd_preview_url      = $hiddenPng.val();
         data.pd_preview_back_url = $hiddenPngBack.val();
         data.pd_json_url         = $hiddenJson.val();
+        data.pd_mockup_color     = $hiddenMockupColor.length ? $hiddenMockupColor.val() : '';
         if (window.console) { console.log('[PD] Injectat design în adding_to_cart:', data.pd_design_id); }
     });
 
@@ -1214,11 +1369,24 @@
         disposeAllCanvases();
 
         // Reset state UI.
-        if ($hiddenId.length)      { $hiddenId.val(''); }
-        if ($hiddenPng.length)     { $hiddenPng.val(''); }
-        if ($hiddenPngBack.length) { $hiddenPngBack.val(''); }
-        if ($hiddenJson.length)    { $hiddenJson.val(''); }
-        if ($selPrev.length)       { $selPrev.prop('hidden', true).find('img').attr('src', ''); }
+        if ($hiddenId.length)          { $hiddenId.val(''); }
+        if ($hiddenPng.length)         { $hiddenPng.val(''); }
+        if ($hiddenPngBack.length)     { $hiddenPngBack.val(''); }
+        if ($hiddenJson.length)        { $hiddenJson.val(''); }
+        if ($hiddenMockupColor.length) { $hiddenMockupColor.val(''); }
+        if ($selPrev.length)           { $selPrev.prop('hidden', true).find('img').attr('src', ''); }
+        // Reset tint la schimbarea produsului (canvas-urile sunt oricum disposed).
+        mockupColor = '';
+        $('.pd-mockup-color').val('#ffffff');
+        // Flow B: constructorul trimite culoarea variației alese (rezolvată
+        // server-side din swatch) — editorul pornește direct recolorat.
+        var autoTint = (PDData.product && PDData.product.auto_tint_color) || '';
+        if (autoTint && isCustomColorEnabled()) {
+            mockupColor = autoTint;
+            $('.pd-mockup-color').val(autoTint);
+        }
+        updateMockupColorUI();
+        applyMockupColorVisibility();
         if ($textCtrls.length)     { $textCtrls.prop('hidden', true).removeClass('is-open'); }
         closeAllSheets();
         $('.pd-bb-edit-text').prop('hidden', true);
@@ -1267,6 +1435,7 @@
         availableSides = determineAvailableSides(PDData);
         activeSide = availableSides.indexOf('front') !== -1 ? 'front' : availableSides[0];
         applySideTabsVisibility();
+        applyMockupColorVisibility();
         // Nu inițializăm canvas — așteaptă click pe „Personalizează" (deschide modal).
     } else {
         if (window.console) { console.info('[PD] PDData not localized — așteaptă pd:mount din constructor.'); }

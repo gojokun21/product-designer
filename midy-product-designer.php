@@ -1,10 +1,11 @@
 <?php
 /**
- * Plugin Name: Product Designer for WooCommerce
- * Plugin URI:  https://example.com/product-designer
+ * Plugin Name: Midy Product Designer
+ * Plugin URI:  https://example.com/midy-product-designer
  * Description: Editor vizual (Fabric.js) pentru personalizarea produselor WooCommerce - haine, textile, print-on-demand.
  * Version:     1.0.0
- * Author:      Your Name
+ * Author:      Midy
+ * Update URI:  false
  * Text Domain: product-designer
  * Domain Path: /languages
  * Requires PHP: 7.4

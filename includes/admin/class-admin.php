@@ -50,8 +50,15 @@ final class Admin {
             true
         );
 
+        // Preset printable areas keyed by garment type, for the drag editor.
+        $presets = [];
+        foreach ( \ProductDesigner\Core\Design_Storage::garment_presets() as $key => $preset ) {
+            $presets[ $key ] = [ 'front' => $preset['front'], 'back' => $preset['back'] ];
+        }
+
         wp_localize_script( 'pd-admin', 'PDAdmin', [
-            'i18n' => [
+            'presets' => $presets,
+            'i18n'    => [
                 'chooseMockup' => __( 'Selectează imaginea mockup', 'product-designer' ),
                 'useMockup'    => __( 'Folosește această imagine', 'product-designer' ),
             ],

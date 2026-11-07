@@ -1,0 +1,1376 @@
+/* Product Designer - Frontend editor */
+
+/* Viewport units fallback pentru iOS Safari < 15.4 / WebView vechi.
+   `--pd-vh` e setat din JS la innerHeight/100; folosim `dvh` peste @supports
+   pentru browsere moderne. */
+:root { --pd-vh: 1vh; }
+
+/* ==========================================================================
+   Design tokens — Minimal & premium (2026), aliniat la brand-ul midy.
+   Definite aici fiindcă designer.css se încarcă în AMBELE fluxuri (modal +
+   constructor); constructor.css le moștenește. */
+.pd-modal,
+.pd-constructor,
+.pd-frontend-wrap {
+    --pd-font: 'Onest', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --pd-surface: #ffffff;
+    --pd-surface-alt: #fafafa;
+    --pd-border: #ececec;
+    --pd-border-strong: #d8d8d8;
+    --pd-text: #0a0a0a;
+    --pd-text-muted: #757575;
+    --pd-text-faint: #9a9a9a;
+    --pd-accent: #5d839d;
+    --pd-accent-soft: rgba(93, 131, 157, .12);
+    --pd-dark: #000000;
+    --pd-radius: 14px;
+    --pd-radius-sm: 10px;
+    --pd-radius-pill: 999px;
+    --pd-shadow-sm: 0 1px 2px rgba(0, 0, 0, .04);
+    --pd-shadow-md: 0 4px 14px rgba(0, 0, 0, .06);
+    --pd-shadow-hover: 0 10px 30px rgba(0, 0, 0, .09);
+    --pd-ease: cubic-bezier(.22, .61, .36, 1);
+    /* Editor (workspace în stil Adobe): linii fine, scenă gri, un singur
+       accent — albastrul selecției din canvas (borderColor în useFabric). */
+    --pd-line: #e8e8e8;
+    --pd-stage: #f2f2f2;
+    --pd-hover: #f3f3f3;
+    --pd-field: #f5f5f5;
+    --pd-select: #1a73e8;
+    --pd-select-soft: rgba(26, 115, 232, .16);
+    --pd-danger: #d93025;
+    --pd-ctl-h: 36px;
+    --pd-ctl-radius: 8px;
+}
+
+.pd-frontend-wrap {
+    margin: 10px 0 14px;
+    font-family: var(--pd-font);
+    /* Containerul butonului de coș e de obicei flex pe rând (tema midy):
+       blocul ocupă un rând întreg, deasupra cantității și a coșului. */
+    flex: 1 0 100%;
+    width: 100%;
+}
+/* Fără design, „Personalizează" e acțiunea principală (lățime completă);
+   după salvare devine secundar („Editează designul"). */
+.pd-open-designer {
+    display: flex;
+    width: 100%;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    background: var(--pd-dark);
+    color: #fff;
+    border: 1px solid var(--pd-dark);
+    padding: 14px 22px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    border-radius: var(--pd-radius-sm);
+    font-family: inherit;
+    transition: background-color .25s var(--pd-ease), transform .12s var(--pd-ease), box-shadow .25s var(--pd-ease);
+}
+.pd-open-designer:hover {
+    background: #333;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .16);
+}
+.pd-open-designer:active { transform: translateY(0); }
+.pd-open-designer__icon { flex: none; }
+.pd-frontend-wrap[data-state="saved"] .pd-open-designer {
+    background: var(--pd-surface);
+    color: var(--pd-text);
+    border-color: var(--pd-border-strong);
+    padding: 11px 18px;
+    font-size: 14px;
+}
+.pd-frontend-wrap[data-state="saved"] .pd-open-designer:hover {
+    background: var(--pd-surface-alt);
+    box-shadow: none;
+}
+
+.pd-frontend-hint {
+    margin: 8px 0 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--pd-text-muted);
+}
+.pd-frontend-hint[hidden] { display: none; }
+.pd-frontend-wrap[data-state="stale"] .pd-frontend-hint {
+    padding: 8px 12px;
+    color: #7a4f00;
+    background: #fff6e0;
+    border: 1px solid #f1d898;
+    border-radius: var(--pd-radius-sm);
+}
+
+/* Fără design, „Adaugă în coș" deschide editorul (cartBridge.js). */
+form.pd-needs-design .single_add_to_cart_button { opacity: .5; }
+
+.pd-selected-preview {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius-sm);
+    background: var(--pd-surface-alt);
+}
+/* `display: flex` de mai sus suprascrie UA stylesheet-ul pentru atributul
+   `hidden`, așa că elementul apare chiar și cu hidden="". Îl forțăm ascuns. */
+.pd-selected-preview[hidden] { display: none; }
+.pd-selected-preview__img {
+    flex: none;
+    width: 64px;
+    height: 64px;
+    object-fit: contain;
+    padding: 2px;
+    border: 1px solid var(--pd-border);
+    border-radius: 8px;
+    background: #fff;
+}
+.pd-selected-preview__img[hidden] { display: none; }
+.pd-selected-preview__info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+}
+.pd-selected-preview__title { font-size: 14px; color: var(--pd-text); }
+.pd-selected-preview__title::before { content: '✓ '; color: #2e7d32; }
+.pd-selected-preview__sides { font-size: 13px; color: var(--pd-text-muted); }
+.pd-clear-design {
+    margin-top: 2px;
+    padding: 0;
+    background: none;
+    border: none;
+    font-size: 12px;
+    color: var(--pd-text-muted);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+/* ==========================================================================
+   Editor — workspace în stil Adobe (2026)
+   Panouri pe toată înălțimea, despărțite de linii fine (fără carduri
+   plutitoare), o scenă gri neutră cu produsul drept „artboard" și un singur
+   accent — albastrul selecției din canvas — pentru focus și cadru.
+   Markup comun: modalul de pe pagina produsului + pasul 3 din constructor.
+   ========================================================================== */
+
+/* ----- Modal (fluxul A) ----- */
+.pd-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 100000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--pd-font);
+    color: var(--pd-text);
+}
+.pd-modal[hidden] { display: none; }
+.pd-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, .6);
+}
+.pd-modal__dialog {
+    position: relative;
+    background: var(--pd-surface);
+    /* Full-screen pe toate platformele — pattern de design tool. */
+    width: 100vw;
+    max-width: 100vw;
+    height: calc(var(--pd-vh, 1vh) * 100);
+    max-height: calc(var(--pd-vh, 1vh) * 100);
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+@supports (height: 100dvh) {
+    .pd-modal__dialog {
+        height: 100dvh;
+        max-height: 100dvh;
+    }
+}
+
+/* App bar: [×] Titlu ........ [Salvează] — aceeași bară ca în constructor. */
+.pd-modal__header {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 56px;
+    padding: 0 12px 0 10px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--pd-line);
+    background: var(--pd-surface);
+}
+.pd-modal__header h2 {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: 0;
+    text-align: left;
+    color: var(--pd-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Butoane-icon (închide, înapoi, șterge) — un singur stil. */
+.pd-modal__close,
+.pd-icon-btn {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--pd-ctl-radius);
+    background: transparent;
+    color: var(--pd-text);
+    font-family: inherit;
+    cursor: pointer;
+    transition: background-color .15s var(--pd-ease), color .15s var(--pd-ease);
+}
+.pd-modal__close:hover,
+.pd-icon-btn:hover { background: var(--pd-hover); }
+.pd-delete:hover { background: rgba(217, 48, 37, .08); color: var(--pd-danger); }
+
+/* Buton principal din app bar. */
+.pd-modal__save-top {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    padding: 0 18px;
+    border: 0;
+    border-radius: var(--pd-ctl-radius);
+    background: var(--pd-dark);
+    color: #fff;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color .15s var(--pd-ease);
+}
+.pd-modal__save-top:hover { background: #262626; }
+.pd-modal__save-top:disabled,
+.pd-modal__save-top[disabled] { background: #cfcfcf; cursor: not-allowed; }
+
+/* Footer-ul vechi nu mai are loc (Salvează e în app bar). */
+.pd-modal__footer { display: none; }
+
+.pd-modal__body {
+    display: grid;
+    grid-template-columns: 288px minmax(0, 1fr);
+    /* grid-template-rows EXPLICIT — fix pentru shrink loop: cu auto-row, grid-ul
+       se dimensiona după canvas-container → fit-ul micșora wrap-ul → buclă. */
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--pd-stage);
+}
+
+/* ----- Panoul de unelte (stânga) ----- */
+.pd-tools {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+    background: var(--pd-surface);
+    border-right: 1px solid var(--pd-line);
+    font-family: var(--pd-font);
+    color: var(--pd-text);
+}
+.pd-panel-section {
+    padding: 20px;
+    border-bottom: 1px solid var(--pd-line);
+}
+/* Scopat pe panou: constructorul stă în conținutul paginii, iar tema stilează
+   `.description_content h3 / p / img` (0,1,1). */
+.pd-tools .pd-panel-title,
+.pd-summary .pd-panel-title {
+    margin: 0 0 12px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--pd-text);
+}
+.pd-tools .pd-panel-hint {
+    margin: 10px 0 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--pd-text-faint);
+}
+
+.pd-add-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+.pd-add-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 84px;
+    margin: 0;
+    padding: 12px 8px;
+    box-sizing: border-box;
+    background: var(--pd-field);
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.25;
+    color: var(--pd-text);
+    text-align: center;
+    cursor: pointer;
+    transition: background-color .15s var(--pd-ease), border-color .15s var(--pd-ease), transform .1s var(--pd-ease);
+}
+.pd-add-tile:hover { background: #ececec; }
+.pd-add-tile:active { transform: scale(.98); }
+.pd-add-tile.is-dragover {
+    background: var(--pd-select-soft);
+    border-color: var(--pd-select);
+    border-style: dashed;
+    color: var(--pd-select);
+}
+
+.pd-selection-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 14px 12px 0 20px;
+}
+.pd-selection-head .pd-panel-title { margin: 0; }
+
+.pd-panel-empty {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 20px;
+    padding: 14px;
+    border: 1px dashed var(--pd-border-strong);
+    border-radius: 10px;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--pd-text-muted);
+}
+.pd-tools .pd-panel-empty p {
+    margin: 0;
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+}
+.pd-panel-empty .pd-icon { flex: none; margin-top: 1px; }
+
+/* ----- Proprietăți text ----- */
+.pd-text-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 12px 20px 24px;
+}
+.pd-text-controls[hidden] { display: none; }
+/* Titlul + „Gata" aparțin bottom-sheet-ului de pe mobil; pe desktop titlul
+   e dat de .pd-selection-head. */
+.pd-text-controls__head { display: none; }
+.pd-text-controls__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--pd-text);
+}
+.pd-text-controls__done { display: none; }
+
+.pd-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    font-size: 12px;
+}
+.pd-field__label {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--pd-text-muted);
+}
+.pd-field__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+/* Specificitate (0,2,0) ca tema să nu-și impună stilurile de input/select. */
+.pd-text-controls .pd-input {
+    width: 100%;
+    min-height: var(--pd-ctl-h);
+    margin: 0;
+    padding: 8px 10px;
+    box-sizing: border-box;
+    background: var(--pd-surface);
+    border: 1px solid var(--pd-border-strong);
+    border-radius: var(--pd-ctl-radius);
+    box-shadow: none;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--pd-text);
+    transition: border-color .15s var(--pd-ease), box-shadow .15s var(--pd-ease);
+}
+.pd-text-controls .pd-input:hover { border-color: #b9b9b9; }
+.pd-text-controls .pd-input:focus {
+    outline: none;
+    border-color: var(--pd-select);
+    box-shadow: 0 0 0 3px var(--pd-select-soft);
+}
+.pd-text-controls textarea.pd-input {
+    min-height: 64px;
+    resize: vertical;
+}
+.pd-text-controls select.pd-input {
+    height: var(--pd-ctl-h);
+    padding: 0 32px 0 10px;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23757575' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 14px;
+    cursor: pointer;
+}
+
+/* Mărime: [−][48][+] + slider dedesubt. */
+.pd-stepper {
+    display: inline-flex;
+    align-items: stretch;
+    height: 32px;
+    border: 1px solid var(--pd-border-strong);
+    border-radius: var(--pd-ctl-radius);
+    background: var(--pd-surface);
+    overflow: hidden;
+    transition: border-color .15s var(--pd-ease), box-shadow .15s var(--pd-ease);
+}
+.pd-stepper:focus-within {
+    border-color: var(--pd-select);
+    box-shadow: 0 0 0 3px var(--pd-select-soft);
+}
+.pd-stepper__btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--pd-text);
+    cursor: pointer;
+}
+.pd-stepper__btn:hover { background: var(--pd-hover); }
+.pd-text-controls .pd-stepper__value {
+    width: 46px;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-left: 1px solid var(--pd-line);
+    border-right: 1px solid var(--pd-line);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    color: var(--pd-text);
+    -moz-appearance: textfield;
+}
+.pd-text-controls .pd-stepper__value:focus { outline: none; }
+.pd-stepper__value::-webkit-outer-spin-button,
+.pd-stepper__value::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Slider subțire; partea umplută vine din --pd-range-pct (TextControls). */
+.pd-text-controls .pd-range {
+    width: 100%;
+    height: 20px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+}
+.pd-range::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--pd-text) var(--pd-range-pct, 0%), #e3e3e3 var(--pd-range-pct, 0%));
+}
+.pd-range::-moz-range-track {
+    height: 4px;
+    border-radius: 999px;
+    background: #e3e3e3;
+}
+.pd-range::-moz-range-progress {
+    height: 4px;
+    border-radius: 999px;
+    background: var(--pd-text);
+}
+.pd-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    margin-top: -6px;
+    border: 1px solid #bdbdbd;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .18);
+}
+.pd-range::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #bdbdbd;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .18);
+}
+.pd-range:focus { outline: none; }
+.pd-range:focus-visible::-webkit-slider-thumb { border-color: var(--pd-select); box-shadow: 0 0 0 3px var(--pd-select-soft); }
+.pd-range:focus-visible::-moz-range-thumb { border-color: var(--pd-select); box-shadow: 0 0 0 3px var(--pd-select-soft); }
+
+/* Control segmentat (B / I / U, aliniere). */
+.pd-segmented {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: var(--pd-ctl-radius);
+    background: #f0f0f0;
+}
+.pd-seg-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--pd-text-muted);
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color .15s var(--pd-ease), color .15s var(--pd-ease), box-shadow .15s var(--pd-ease);
+}
+.pd-seg-btn:hover { color: var(--pd-text); }
+.pd-seg-btn.is-active {
+    background: var(--pd-surface);
+    color: var(--pd-text);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 0 0 1px rgba(0, 0, 0, .04);
+}
+.pd-seg-btn em { font-family: Georgia, 'Times New Roman', serif; }
+
+/* Culori text: paletă + selector liber, grilă 6 × 2 pe toată lățimea. */
+.pd-color-row {
+    display: grid;
+    grid-template-columns: repeat(6, auto);
+    justify-content: space-between;
+    row-gap: 10px;
+}
+.pd-color-dot {
+    position: relative;
+    flex: none;
+    width: 24px;
+    height: 24px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .14);
+    cursor: pointer;
+    transition: transform .1s var(--pd-ease), box-shadow .15s var(--pd-ease);
+}
+.pd-color-dot:hover { transform: scale(1.08); }
+.pd-color-dot.is-active {
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .14), 0 0 0 2px var(--pd-surface), 0 0 0 3.5px var(--pd-text);
+}
+.pd-color-dot--custom {
+    overflow: hidden;
+    background: conic-gradient(#f44336, #ffb300, #43a047, #00acc1, #3949ab, #8e24aa, #f44336);
+}
+.pd-color-dot--custom input[type="color"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+/* Focus vizibil, același inel peste tot. */
+.pd-modal__close:focus-visible,
+.pd-modal__save-top:focus-visible,
+.pd-icon-btn:focus-visible,
+.pd-add-tile:focus-visible,
+.pd-stepper__btn:focus-visible,
+.pd-seg-btn:focus-visible,
+.pd-color-dot:focus-visible,
+.pd-color-dot--custom:focus-within,
+.pd-side-tab:focus-visible,
+.pd-color-swatch:focus-visible,
+.pd-bb-btn:focus-visible,
+.pd-zoom-reset:focus-visible {
+    outline: 2px solid var(--pd-select);
+    outline-offset: 2px;
+}
+
+/* ----- Scena + canvas ----- */
+.pd-canvas-wrap {
+    /* CRITIC: position relative = containing block pentru canvas-container,
+       care e position: absolute (setat din JS) și deci nu contribuie la
+       mărimea wrap-ului — mărimea vine doar din layout. */
+    position: relative;
+    /* Mobil: wrap-ul ia aspectul mockup-ului (--pd-mockup-aspect, setat din JS),
+       ancorat pe height: 100% și clampat de max-width. Fallback 6/7 = canvasul
+       implicit 600×700. Desktopul umple toată scena (vezi @media mai jos). */
+    aspect-ratio: var(--pd-mockup-aspect, 6 / 7);
+    height: 100%;
+    max-width: 100%;
+    margin: auto;
+    background: #fff;
+    padding: 0;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+}
+/* Fundal alb doar pe canvas-container — nu pe <canvas>: Fabric pune un
+   upper-canvas transparent peste lower-canvas, care are deja backgroundColor. */
+.pd-canvas-wrap .canvas-container { background: #fff; }
+
+@media (min-width: 901px) {
+    /* Desktop: wrap-ul e toată scena gri; produsul (canvas-container) e
+       artboard-ul centrat. Padding-ul — citit de fitCanvasToWrap — lasă loc
+       pentru informațiile de sus și dock-ul de jos. */
+    .pd-canvas-wrap {
+        aspect-ratio: auto;
+        width: 100%;
+        height: 100%;
+        max-width: none;
+        margin: 0;
+        padding: 60px 32px 76px;
+        box-sizing: border-box;
+        background: transparent;
+    }
+    .pd-canvas-wrap .canvas-container {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 0 0 1px rgba(0, 0, 0, .05), 0 16px 40px -16px rgba(0, 0, 0, .22);
+    }
+}
+
+/* Informații imprimeu + avertismentul „iese din cadru" — sus, centrat. */
+.pd-canvas-notes {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: calc(100% - 32px);
+    pointer-events: none;
+    font-family: var(--pd-font);
+}
+.pd-print-info {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+}
+.pd-print-info__frame,
+.pd-print-info__extra,
+.pd-print-info__move {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 28px;
+    padding: 5px 12px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    background: var(--pd-surface);
+    box-shadow: 0 0 0 1px var(--pd-line), 0 1px 2px rgba(0, 0, 0, .04);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.3;
+    color: var(--pd-text-muted);
+    text-align: center;
+}
+.pd-print-info__frame { font-weight: 600; color: var(--pd-text); }
+/* Pătrățelul punctat = cadrul albastru de pe produs. */
+.pd-print-info__glyph {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border: 1.5px dashed var(--pd-select);
+    border-radius: 2px;
+}
+.pd-print-info__extra.is-on {
+    background: var(--pd-dark);
+    box-shadow: none;
+    color: #fff;
+}
+.pd-oob-warning {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    padding: 7px 12px;
+    box-sizing: border-box;
+    border-radius: 10px;
+    background: var(--pd-danger);
+    box-shadow: 0 6px 16px -4px rgba(217, 48, 37, .45);
+    font-size: 12px;
+    line-height: 1.35;
+    color: #fff;
+    text-align: left;
+}
+.pd-oob-warning__icon {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .22);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* Dock jos: [Față | Spate] │ [● Alb ● Negru]. */
+.pd-stage-dock {
+    position: absolute;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100% - 32px);
+    padding: 4px;
+    box-sizing: border-box;
+    border-radius: 12px;
+    background: var(--pd-surface);
+    box-shadow: 0 0 0 1px var(--pd-line), 0 8px 24px -8px rgba(0, 0, 0, .18);
+    font-family: var(--pd-font);
+}
+.pd-stage-dock__sep {
+    flex: none;
+    align-self: stretch;
+    width: 1px;
+    margin: 4px 2px;
+    background: var(--pd-line);
+}
+
+.pd-side-tabs {
+    display: flex;
+    gap: 2px;
+}
+.pd-side-tabs[hidden] { display: none; }
+.pd-side-tab,
+.pd-color-swatch {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--pd-text-muted);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color .15s var(--pd-ease), color .15s var(--pd-ease);
+}
+.pd-side-tab:hover:not([disabled]):not(.is-active),
+.pd-color-swatch:hover:not(.is-active) { background: var(--pd-hover); color: var(--pd-text); }
+.pd-side-tab.is-active,
+.pd-color-swatch.is-active {
+    background: #ececec;
+    color: var(--pd-text);
+    font-weight: 600;
+}
+.pd-side-tab[disabled] { opacity: .4; cursor: not-allowed; }
+.pd-side-tab__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    background: var(--pd-select);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+}
+.pd-side-tab__count[hidden] { display: none; }
+
+.pd-color-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+}
+.pd-color-swatch { padding: 0 12px 0 8px; }
+.pd-color-swatch__dot {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .18);
+}
+
+/* Mesaje de stare (toast) — deasupra dock-ului. */
+.pd-status {
+    position: absolute;
+    left: 50%;
+    bottom: 72px;
+    transform: translateX(-50%);
+    z-index: 40;
+    max-width: min(420px, calc(100% - 32px));
+    padding: 8px 14px;
+    box-sizing: border-box;
+    border-radius: 8px;
+    background: rgba(20, 20, 20, .92);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .2);
+    font-family: var(--pd-font);
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.35;
+    color: #fff;
+    text-align: center;
+    pointer-events: none;
+}
+.pd-status:empty { display: none; }
+
+/* ==========================================================================
+   Bottom-bar + bottom-sheet (markup comun cu constructorul)
+   Vizibilitatea e gestionată din @media — pe desktop, ascunse.
+   ========================================================================== */
+
+.pd-bottom-bar { display: none; }
+.pd-text-quickbar { display: none; }
+.pd-zoom-reset { display: none; }
+
+/* ==========================================================================
+   Mobil / tabletă — bottom-bar + bottom-sheet
+   ==========================================================================
+   - Modalul e full-screen (100dvh).
+   - Panoul `.pd-tools` se dizolvă (display: contents); acțiunile trec în
+     `.pd-bottom-bar`, iar `.pd-text-controls` devine bottom-sheet.
+   - Ținte tactile ≥ 44px.
+*/
+
+@media (max-width: 900px) {
+    .pd-frontend-wrap { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+    .pd-open-designer { width: 100%; padding: 14px 18px; font-size: 15px; min-height: 48px; }
+
+    /* ----- Modal full-screen cu fallback dvh ----- */
+    .pd-modal__dialog {
+        height: calc(var(--pd-vh) * 100);
+        max-height: calc(var(--pd-vh) * 100);
+    }
+    @supports (height: 100dvh) {
+        .pd-modal__dialog {
+            height: 100dvh;
+            max-height: 100dvh;
+        }
+    }
+
+    .pd-modal__header {
+        height: auto;
+        min-height: 52px;
+        padding: 6px 8px;
+        padding-top: max(6px, env(safe-area-inset-top));
+        gap: 4px;
+    }
+    .pd-modal__header h2 { font-size: 15px; margin: 0 4px; }
+    .pd-modal__close { width: 44px; height: 44px; }
+    .pd-modal__save-top { height: 40px; padding: 0 16px; }
+
+    /* ----- Grid: canvas / quick bar / bottom bar ----- */
+    .pd-modal__body {
+        grid-template-columns: minmax(0, 1fr);
+        /* canvas (1fr) / quick bar (auto, 0 când e ascuns) / bottom bar (auto) */
+        grid-template-rows: 1fr auto auto;
+    }
+    .pd-modal__body .pd-text-quickbar { grid-row: 2; }
+    .pd-modal__body .pd-bottom-bar { grid-row: 3; }
+
+    /* Panoul dispare; rămâne doar sheet-ul de text (position: fixed). */
+    .pd-tools {
+        display: contents;
+    }
+    .pd-tools > :not(.pd-text-controls) { display: none; }
+
+    /* Toast-ul plutește deasupra bottom-bar-ului. */
+    .pd-status {
+        position: fixed;
+        bottom: 84px;
+        z-index: 100;
+        max-width: 88%;
+    }
+
+    /* Wrap-ul păstrează aspectul mockup-ului (regula de bază) și se centrează
+       în rândul 1fr; restul rândului e zona gri din jur. */
+    .pd-canvas-wrap {
+        order: 1;
+        touch-action: none;
+    }
+    /* Plafon pe canvas-container (wrapper-ul Fabric) — niciodată mai mare decât
+       părintele, pentru fit-uri rulate cu layout vechi. NU pune max-width pe
+       <canvas>: ar distorsiona aspectul. */
+    .pd-canvas-wrap .canvas-container {
+        max-width: 100%;
+        max-height: 100%;
+        overflow: hidden;
+    }
+
+    .pd-canvas-notes { top: 8px; width: calc(100% - 16px); gap: 6px; }
+    .pd-print-info__frame,
+    .pd-print-info__extra,
+    .pd-print-info__move { min-height: 26px; padding: 4px 10px; font-size: 11.5px; }
+
+    /* Dock-ul: doar culorile (Față / Spate e în bottom-bar). */
+    .pd-stage-dock { bottom: 10px; max-width: calc(100% - 20px); }
+    .pd-stage-dock:not(.has-colors),
+    .pd-stage-dock .pd-side-tabs,
+    .pd-stage-dock__sep { display: none; }
+    .pd-color-swatch { height: 36px; }
+
+    /* ----- Bottom-bar fix jos, cu safe-area ----- */
+    .pd-bottom-bar {
+        display: flex;
+        gap: 2px;
+        padding: 4px 6px;
+        padding-bottom: max(4px, env(safe-area-inset-bottom));
+        background: var(--pd-surface);
+        border-top: 1px solid var(--pd-line);
+        order: 2;
+        z-index: 50;
+        font-family: var(--pd-font);
+    }
+    .pd-bottom-bar[hidden] { display: none; }
+    .pd-bb-btn {
+        flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        padding: 8px 4px;
+        min-height: 56px;
+        background: none;
+        border: 0;
+        border-radius: 10px;
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--pd-text-muted);
+        cursor: pointer;
+        transition: background-color .12s ease, color .12s ease;
+    }
+    .pd-bb-btn:active:not([disabled]) { background: var(--pd-hover); color: var(--pd-text); }
+    .pd-bb-btn[disabled] { opacity: .35; cursor: not-allowed; }
+    .pd-bb-btn[hidden] { display: none; }
+    .pd-bb-btn__icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        color: var(--pd-text);
+    }
+    .pd-bb-btn[disabled] .pd-bb-btn__icon { color: inherit; }
+    .pd-bb-btn__label {
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* ----- Quick bar: la selecția unui text, DEASUPRA bottom-bar-ului -----
+       Rând propriu în grid (nu fixed) → canvas-ul se micșorează în loc să fie
+       acoperit, deci mânerele de scalare rămân accesibile. */
+    .pd-text-quickbar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        order: 1;
+        padding: 6px 10px;
+        background: var(--pd-surface);
+        border-top: 1px solid var(--pd-line);
+        z-index: 60;
+        font-family: var(--pd-font);
+    }
+    .pd-text-quickbar[hidden] { display: none; }
+    .pd-qb-btn {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 52px;
+        min-height: 44px;
+        padding: 0 10px;
+        background: var(--pd-field);
+        border: 0;
+        border-radius: 10px;
+        font-family: inherit;
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--pd-text);
+        cursor: pointer;
+    }
+    .pd-qb-btn:active { background: #e6e6e6; }
+    .pd-qb-sign { font-size: 17px; margin-left: 1px; }
+    .pd-qb-size {
+        flex: 1 1 auto;
+        text-align: center;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--pd-text);
+        font-variant-numeric: tabular-nums;
+    }
+    .pd-qb-color {
+        flex: 0 0 auto;
+        width: 44px;
+        height: 44px;
+        padding: 4px;
+        box-sizing: border-box;
+        border: 1px solid var(--pd-border-strong);
+        border-radius: 10px;
+        overflow: hidden;
+        cursor: pointer;
+    }
+    .pd-qb-color input[type="color"] {
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        border: 0;
+        background: none;
+        cursor: pointer;
+    }
+    .pd-qb-edit {
+        flex: 0 0 auto;
+        min-height: 44px;
+        padding: 0 16px;
+        background: var(--pd-dark);
+        color: #fff;
+        border: 0;
+        border-radius: 10px;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .pd-qb-edit:active { background: #333; }
+
+    /* ----- Bottom sheet: .pd-text-controls și .pd-summary ----- */
+    .pd-text-controls,
+    .pd-summary {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        margin: 0;
+        padding: 6px 16px max(20px, env(safe-area-inset-bottom));
+        background: var(--pd-surface);
+        border-top: 1px solid var(--pd-line);
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -8px 28px rgba(0, 0, 0, .18);
+        max-height: calc(var(--pd-vh) * 70);
+        overflow-y: auto;
+        transform: translateY(110%);
+        transition: transform .22s ease;
+        visibility: hidden;
+        pointer-events: none;
+        z-index: 80;
+        gap: 16px;
+        font-family: var(--pd-font);
+    }
+    @supports (max-height: 70dvh) {
+        .pd-text-controls,
+        .pd-summary { max-height: 70dvh; }
+    }
+    .pd-text-controls.is-open,
+    .pd-summary.is-open {
+        transform: translateY(0);
+        visibility: visible;
+        pointer-events: auto;
+    }
+    /* Pe mobil, [hidden] pe text-controls NU mai ascunde (se folosește .is-open). */
+    .pd-text-controls[hidden] { display: flex; }
+    /* Mânerul sheet-ului. */
+    .pd-text-controls::before,
+    .pd-summary::before {
+        content: "";
+        display: block;
+        width: 36px;
+        height: 4px;
+        border-radius: 999px;
+        background: #d6d6d6;
+        margin: 0 auto -4px;
+    }
+
+    .pd-text-controls__head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+    }
+    .pd-text-controls__title { font-size: 15px; }
+    /* „Gata" închide sheet-ul fără să deselecteze obiectul. */
+    .pd-text-controls__done {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        padding: 0 16px;
+        background: var(--pd-dark);
+        color: #fff;
+        border: 0;
+        border-radius: 10px;
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+    .pd-text-controls__done:active { background: #333; }
+
+    /* Ținte tactile. ≥16px în câmpuri previne zoom-ul iOS la focus. */
+    .pd-text-controls .pd-input { min-height: 44px; font-size: 16px; }
+    .pd-text-controls select.pd-input { height: 44px; }
+    .pd-text-controls textarea.pd-input { resize: none; }
+    .pd-stepper { height: 44px; }
+    .pd-stepper__btn { width: 44px; }
+    .pd-text-controls .pd-stepper__value { width: 56px; font-size: 16px; }
+    .pd-text-controls .pd-range { height: 36px; }
+    .pd-seg-btn { width: 44px; height: 40px; }
+    .pd-color-row { row-gap: 12px; }
+    .pd-color-dot { width: 32px; height: 32px; }
+
+    @media (prefers-reduced-motion: reduce) {
+        .pd-text-controls,
+        .pd-summary { transition: none; }
+    }
+
+    /* ----- Reset zoom plutitor în canvas ----- */
+    .pd-zoom-reset {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, .95);
+        box-shadow: 0 0 0 1px var(--pd-line), 0 2px 8px rgba(0, 0, 0, .14);
+        color: var(--pd-text);
+        cursor: pointer;
+        z-index: 60;
+    }
+    .pd-zoom-reset[hidden] { display: none; }
+
+    .pd-bb-btn,
+    .pd-add-tile,
+    .pd-icon-btn,
+    .pd-seg-btn,
+    .pd-stepper__btn,
+    .pd-color-dot,
+    .pd-color-swatch,
+    .pd-modal__close,
+    .pd-side-tab,
+    .pd-zoom-reset { touch-action: manipulation; }
+
+    /* Cât timp un sheet e deschis, scroll-ul de fundal e blocat. */
+    html.pd-sheet-open,
+    html.pd-modal-open { overflow: hidden; }
+
+    /* În timpul editării IText (tastatura virtuală), bottom-bar-ul și sheet-urile
+       dispar ca textul tastat să rămână vizibil. */
+    html.pd-text-editing .pd-bottom-bar,
+    html.pd-text-editing .pd-text-quickbar,
+    html.pd-text-editing .pd-text-controls,
+    html.pd-text-editing .pd-summary { display: none !important; }
+
+    /* Fundal discret deasupra sheet-ului deschis. */
+    .pd-text-controls.is-open::after,
+    .pd-summary.is-open::after {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 100%;
+        background: rgba(0, 0, 0, .18);
+        pointer-events: none;
+    }
+
+    /* Țintă tactilă mai mare pe „șterge designul" (pagina de produs). */
+    .pd-clear-design { min-height: 40px; padding: 8px 14px; font-size: 13px; }
+}
+
+/* Telefon foarte îngust — densitate suplimentară. */
+@media (max-width: 380px) {
+    .pd-bb-btn { font-size: 10px; padding: 6px 2px; }
+    .pd-modal__header h2 { font-size: 14px; }
+}
+
+/* Telefon landscape (înălțime mică) — sheet-ul ia mai mult loc, bara mai puțin. */
+@media (max-width: 900px) and (max-height: 500px) {
+    .pd-text-controls,
+    .pd-summary {
+        max-height: calc(var(--pd-vh) * 90);
+    }
+    @supports (max-height: 90dvh) {
+        .pd-text-controls,
+        .pd-summary { max-height: 90dvh; }
+    }
+    .pd-bb-btn { min-height: 48px; }
+    .pd-bb-btn__label { display: none; }
+}
+
+/* ==========================================================================
+   Custom mockup color — chip plutitor peste canvas (.pd-canvas-wrap).
+   Vizibil doar când produsul are opt-in (_pd_custom_color = yes); JS îl
+   arată/ascunde la boot. Pe mobil rămâne doar swatch-ul (label-ul dispare).
+   ========================================================================== */
+
+.pd-mockup-color-ctrl {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pd-mockup-color-ctrl[hidden] { display: none; }
+
+.pd-mockup-color-ctrl__pick {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, .95);
+    border: 1px solid #ccc;
+    border-radius: 999px;
+    padding: 5px 12px 5px 5px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .15);
+}
+
+/* Input-ul de culoare acoperă invizibil tot chip-ul — tap oriunde pe el
+   deschide pickerul nativ. */
+.pd-mockup-color-ctrl__pick input.pd-mockup-color {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+}
+
+.pd-mockup-color-ctrl__swatch {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, .2);
+    flex-shrink: 0;
+}
+
+/* Nicio culoare aleasă → roată cromatică drept hint că e selector de culoare. */
+.pd-mockup-color-ctrl__swatch.is-unset {
+    background: conic-gradient(#f44, #fb0, #4c4, #0cc, #36f, #c3f, #f44);
+}
+
+.pd-mockup-color-ctrl__label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1a1a;
+    white-space: nowrap;
+}
+
+.pd-mockup-color-reset {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid #ccc;
+    background: rgba(255, 255, 255, .95);
+    color: #444;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .15);
+}
+
+.pd-mockup-color-reset[hidden] { display: none; }
+
+@media (max-width: 900px) {
+    .pd-mockup-color-ctrl__label { display: none; }
+    .pd-mockup-color-ctrl__pick { padding: 5px; }
+}

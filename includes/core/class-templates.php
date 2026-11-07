@@ -142,6 +142,7 @@ final class Templates {
      * Verifică dacă un produs e marcat ca template.
      */
     public static function is_template( int $product_id ) : bool {
-        return get_post_meta( $product_id, self::META_IS_TEMPLATE, true ) === 'yes';
+        $source = I18n_Polylang::meta_source_id( $product_id, self::META_IS_TEMPLATE );
+        return get_post_meta( $source, self::META_IS_TEMPLATE, true ) === 'yes';
     }
 }

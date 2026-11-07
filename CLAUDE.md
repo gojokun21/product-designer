@@ -4,9 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A WooCommerce plugin (`Product Designer for WooCommerce`) that lets shoppers personalize products (apparel / print-on-demand) with a Fabric.js editor. Vanilla PHP plugin — no Composer, no build step, no test suite. UI strings are in Romanian (text domain `product-designer`).
+A WooCommerce plugin (`Product Designer for WooCommerce`) that lets shoppers personalize products (apparel / print-on-demand) with a Fabric.js editor. UI strings are in Romanian (text domain `product-designer`).
 
-Runs inside a Local by Flywheel WordPress install at `app/public/wp-content/plugins/product-designer/`. There is nothing to build or compile: edit PHP / JS / CSS, then reload the page. Asset URLs use `filemtime()` for cache-busting (`asset_version()` helper in each enqueueing class), so changes are picked up immediately without bumping `PD_VERSION`.
+Runs inside a Local by Flywheel WordPress install at `app/public/wp-content/plugins/product-designer/`.
+
+**Frontend is a Vue 3 + Vite app** (since the migration off vanilla JS). Source lives in `src/`; the build outputs hashed bundles to `assets/dist/` with a Vite `manifest.json`. The PHP `ProductDesigner\Core\Vite` helper (`includes/core/class-vite.php`) reads the manifest and enqueues the right JS/CSS. **After editing anything under `src/` you must rebuild**: `npm run build` (or `npm run dev` for HMR — gate it with `define( 'PD_VITE_DEV', true )` in `wp-config.php`). The PHP backend (REST, cart, order, admin) is still vanilla PHP with no Composer/build.
+
+- Two Vite entries share one editor: `src/main-product.js` (Flow A, mounts `#pd-designer-app`) and `src/main-constructor.js` (Flow B, mounts `#pd-constructor-app`). The Fabric core lives in `src/composables/useFabric.js`; the wizard state in `src/stores/wizard.js`.
+- Fabric.js is an npm dep (`fabric@5.3.0`), bundled by Vite — no longer vendored as a global.
+- The CSS (`designer.css`, `constructor.css`) is moved to `src/styles/` and imported into the build; it keeps the original class names because the responsive/mobile-sheet rules are coupled to Fabric's generated DOM and global `html` classes.
+- The cart→order DOM contract is preserved: `class-frontend.php` still server-renders the five hidden `pd_*` inputs inside `form.cart`; `src/bridge/cartBridge.js` writes them and keeps the jQuery `adding_to_cart` / `found_variation` / `reset_data` hooks. `jquery` stays a script dep for this reason.
 
 Requires WooCommerce active — `product-designer.php` short-circuits with an admin notice otherwise. HPOS (custom order tables) compatibility is declared.
 
@@ -53,6 +60,52 @@ The `Templates` class hides them from the shop frontend and from the standard `e
 
 Override the template list view with `?pd_show_templates=1`.
 
+## Multilingual (Polylang)
+
+`ProductDesigner\Core\I18n_Polylang` (`includes/core/class-i18n-polylang.php`) is the single
+Polylang bridge; everything in it is a no-op when Polylang is absent. It is registered
+**first** in `Plugin::boot()` because its `pll_copy_*` filters must be in place before
+Polylang copies content into a new translation.
+
+Four Polylang facts the plugin has to work around — check these before changing anything here:
+
+- **Protected metas are never copied.** `PLL_Sync_Post_Metas::get_metas_to_copy()` drops every
+  key that passes `is_protected_meta()`, i.e. everything starting with `_`. All of `_pd_*`
+  qualifies. `I18n_Polylang::product_metas()` is the explicit copy list — **add any new `_pd_*`
+  product meta to it**, otherwise translations silently lose that setting.
+- **`pd_template_cat` is not in the default copy list** (it is `public => false`, so Polylang
+  neither translates it nor shows it in Settings). It is added via `pll_copy_taxonomies`, and
+  stays *untranslated on purpose*: the same terms are shared across languages so `tax_query`
+  behaves identically. Category names are translated as Polylang strings instead — registered
+  in admin via `pll_register_string`, read back through `I18n_Polylang::term_label()`.
+- **REST requests only know their language from `?lang=`.** `PLL_REST_Request::set_language()`
+  reads nothing else — not the referer, not the origin. `PLL_REST_Post::can_filter_query()`
+  therefore filters our `WP_Query` only when that parameter is present. Both bootstraps ship
+  `rest.lang`, `endpoint()` in `src/composables/useDesignApi.js` appends it to every call, and
+  `Rest_Constructor::with_language()` falls back to an explicit language `tax_query` when it is
+  missing — without that fallback the wizard lists every translation of every template.
+- **Polylang does not filter `locale` in REST**, so `__()` would answer in the default language
+  even for `?lang=ru`. `I18n_Polylang::switch_rest_locale()` switches it for
+  `product-designer/v1` routes only, and restores it on `rest_post_dispatch`.
+
+Two more spots depend on language and are easy to miss:
+
+- `Design_Storage::config_source_id()` reads the designer config from whichever translation
+  actually holds `_pd_enabled`, so a translation created outside Polylang (import, duplicate)
+  still works. An explicit `_pd_enabled = 'no'` is respected.
+- `_pd_mockup_by_color` is keyed by attribute-term slug, and PLLWC translates all `pa_*`
+  taxonomies — a variation in another language carries a different slug for the same colour.
+  The map is synced verbatim across translations (keys included), so its key language is not
+  the product's language. `resolve_config_for_variation()` finds the key among all translations
+  of the variation's term via `I18n_Polylang::match_term_slug()`.
+
+`Page_Installer` keeps the canonical (default-language) page id in `pd_constructor_page_id` and
+creates/links the missing translations on `admin_init`; `get_page_id( $lang )` resolves it.
+
+Translations live in `languages/`: `product-designer.pot` is the full catalogue,
+`product-designer-ru_RU.po/.mo` covers the customer-facing strings only — admin strings are
+left empty on purpose so gettext falls back to the Romanian original.
+
 ## Cart → Order data flow (the load-bearing fragile bit)
 
 The design must travel from REST save → cart line item → order item meta. There are **three independent pickup paths** because different add-to-cart mechanisms (classic form POST, AJAX, WooCommerce Blocks / Store API) deliver `$_POST` differently or not at all:
@@ -89,18 +142,22 @@ Validator enforces 512 KB JSON cap and 4 MB preview cap on `/design`. `Image_Han
 - `pd_settings` (option) — `max_upload_size_mb`, `allowed_mime_types`, `canvas_width`, `canvas_height`. Read via `Validator::settings()`.
 - `pd_constructor_page_id` (option) — auto-installed Constructor page. Owned by `Page_Installer`.
 - `pd_constructor_settings` (option) — currently only carries `title`. Free-form.
-- Per-product meta — `_pd_enabled`, `_pd_mockup_image_id`. Per-variation override — `_pd_mockup_image_id` on the variation post.
+- Per-product meta — `_pd_enabled`, `_pd_mockup_image_id`, `_pd_custom_color` (opt-in for the free mockup-recolor picker; mockup must be white/light because the tint is a multiply blend). Per-variation override — `_pd_mockup_image_id` on the variation post.
+- Custom mockup color flow — the editor tints the mockup client-side (Fabric `BlendColor` multiply filter), so the chosen color is baked into the preview PNGs. The hex travels REST `/design` (`mockup_color` param, accepted only when the product opted in) → design JSON (`mockup_color` root key) + WC session → `pd_mockup_color` hidden input / POST → cart item (`pd_design.mockup_color`) → order item meta `_pd_design_mockup_color` (internal) plus a customer-visible "Culoare produs" meta.
+- Auto-tint from variation swatches — `Design_Storage::get_variation_term_colors()` builds `[attr → [term slug → hex]]` by applying the `pd_variation_term_color` filter per term (the THEME provides the hex from its swatch term meta, e.g. midy-template hooks it to `midy_swatch_color`); terms with a dedicated per-color mockup are skipped. Flow A ships the map as `PDData.product.variation_colors` and designer.js listens to `found_variation`/`reset_data`; Flow B resolves `auto_tint_color` server-side in `/constructor/product-config`. Both gated by the same `_pd_custom_color` opt-in.
 - Per-template meta — `_pd_is_template`. Taxonomy `pd_template_cat`.
 - Term meta — `pd_icon_id` (attachment id) for category cards in the constructor wizard.
 
 ## Conventions worth knowing
 
-- All public-facing strings are Romanian; translation should target `product-designer` text domain (no `.po` files yet, so source-language only).
-- `Frontend`, `Admin`, `Templates_Admin`, `Constructor_Shortcode` all reimplement the same `asset_version( $relative_path )` helper that returns `filemtime()` with fallback to `PD_VERSION`. If you add a new enqueueing class, copy that helper rather than relying on `PD_VERSION` directly.
-- Fabric.js is **vendored** at `assets/vendor/fabric.min.js` (5.3.1) — not loaded from CDN. Reason: works offline (Local by Flywheel) and not subject to CDN outages. Don't switch back to CDN.
-- `enableRetinaScaling: false` in `designer.js` is a deliberate workaround for a Fabric 5.x bug where mouse coords miss objects on HiDPI screens. Do not re-enable.
-- The constructor template `templates/constructor-shell.php` is overridable from the active theme at `theme/product-designer/constructor-shell.php` (handled by `Constructor_Shortcode::render()` via `locate_template`).
+- All public-facing strings are Romanian; translation should target `product-designer` text domain (no `.po` files yet, so source-language only). Strings reach Vue via the `data-pd-config` JSON on the mount root (`i18n` key) or the `constructor/product-config` REST `i18n`.
+- Frontend assets are enqueued via `Core\Vite::enqueue_entry()` (manifest-driven, hashed — no `filemtime`). `Admin` / `Templates_Admin` still use a local `asset_version()` filemtime helper for the **admin** CSS/JS, which is untouched by the Vue migration.
+- Fabric.js is an npm dep bundled by Vite (`src/composables/useFabric.js` does `import { fabric } from 'fabric'`). The old vendored `assets/vendor/fabric.min.js` and the `pd-fabric` enqueue are gone. Pin stays in the v5 line (`5.3.0`) — the editor relies on the v5 API (`fabric.Image.filters.BlendColor`, `c.toJSON`, `c.wrapperEl`, `enableRetinaScaling`).
+- `enableRetinaScaling: false` (now in `useFabric.js`) is a deliberate workaround for a Fabric 5.x bug where mouse coords miss objects on HiDPI screens. Do not re-enable. Several other porting notes in `useFabric.js` are bug fixes, not cleanups — see the file header.
+- `templates/constructor-shell.php` is now just the Vue mount root (`#pd-constructor-app`), still overridable from the theme at `theme/product-designer/constructor-shell.php` — but only the root div matters now; the wizard UI is Vue.
 - `DONOTCACHEPAGE` is defined in the Constructor template to keep page caches off the wizard.
+- Editor UI is an Adobe-style workspace: full-height panels split by hairlines, a grey stage, one accent (`--pd-select`, the Fabric selection blue). Tokens live at the top of `src/styles/designer.css`, line icons in `src/components/editor/PdIcon.vue`. On desktop `.pd-canvas-wrap` fills the whole stage and Fabric's `.canvas-container` is the artboard — the wrap's padding (room for the info chips and the bottom dock) is read by `fitCanvasToWrap`. On mobile the wrap keeps `--pd-mockup-aspect`.
+- The Constructor page renders inside the theme's `.description_content`, which styles `h3`, `p` and `img` at specificity (0,1,1). Editor rules for those elements need two classes (e.g. `.pd-tools .pd-panel-title`) or the theme wins.
 
 ## Debugging
 

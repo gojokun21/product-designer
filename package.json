@@ -1,0 +1,20 @@
+{
+  "name": "product-designer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vue 3 + Vite frontend for the Product Designer WooCommerce plugin.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "fabric": "5.3.0",
+    "pinia": "^2.2.0",
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.1.0",
+    "vite": "^5.4.0"
+  }
+}

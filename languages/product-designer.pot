@@ -1,0 +1,743 @@
+# Copyright (C) Midy
+# This file is distributed under the same license as the Midy Product Designer plugin.
+msgid ""
+msgstr ""
+"Project-Id-Version: Midy Product Designer 1.0.0\n"
+"Report-Msgid-Bugs-To: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Domain: product-designer\n"
+
+#: includes/admin/class-admin.php:62
+msgid "Selectează imaginea mockup"
+msgstr ""
+
+#: includes/admin/class-admin.php:63
+msgid "Folosește această imagine"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:101
+msgid "Descarcă JSON brut"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:108 includes/admin/class-product-metabox.php:224 includes/api/class-rest-constructor.php:250 includes/frontend/class-constructor-shortcode.php:81 includes/frontend/class-frontend.php:113 includes/woocommerce/class-order.php:147
+msgid "Față"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:111 includes/admin/class-product-metabox.php:225 includes/api/class-rest-constructor.php:251 includes/frontend/class-constructor-shortcode.php:82 includes/frontend/class-frontend.php:114 includes/woocommerce/class-order.php:155
+msgid "Spate"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:121
+msgid "JSON-ul design-ului nu a putut fi citit de pe disk. Este posibil să fi fost șters."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:244
+msgid "Text"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:250
+msgid "Font"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:258
+msgid "Mărime"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:266
+msgid "Culoare"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:272
+msgid "Aliniere"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:275 includes/admin/class-order-admin.php:330
+msgid "Poziție (px)"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:301 includes/admin/class-templates-admin.php:144
+msgid "Imagine"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:309
+msgid "Fișier"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:314
+msgid "URL extern / inaccesibil"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:321
+msgid "Dimensiune originală"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:324
+msgid "Dimensiune pe mockup"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:336
+msgid "Descarcă originalul"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:380
+msgid "Product Designer — design LIPSĂ"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:383
+msgid "Produsul are designer-ul activat, dar pe acest order item nu e salvat nicio meta de design. Fluxul cart → order s-a rupt."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:385
+msgid "Cauze posibile:"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:387
+msgid "Comanda a fost plasată ÎNAINTE de activarea/salvarea designer-ului (comandă veche)."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:388
+msgid "Checkout via Store API (blocks) — hidden inputs din form.cart nu se trimit."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:389
+msgid "Item adăugat în coș programatic (admin manual order, REST API etc)."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:390
+msgid "Tema folosește AJAX add-to-cart care nu serializează hidden inputs."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:393
+msgid "Meta-uri pd_* găsite pe item:"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:396
+msgid "Niciun meta pd_* găsit pe item — cart→order n-a transferat nimic."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:399
+msgid "Diagnostic WC Session:"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:403
+msgid "Sessions WC cu cheia pd_design_for_* (oricare produs): %d"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:407
+msgid "Sessions cu design salvat pentru produsul #%1$d: %2$d"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:412 includes/admin/class-order-admin.php:415
+msgid "Concluzie:"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:413
+msgid "REST-ul de save nu scrie în WC Session (sau clientul nu a apăsat „Salvează designul\" înainte de add-to-cart). Verifică în Console la salvare că apare „[PD] WC Session OK: DA\"."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:416
+msgid "REST-ul SCRIE în session, dar transfer_to_order nu găsește match în session-ul acestei comenzi. Cookie-ul session s-a pierdut între save și checkout (browser blochează, session expired, sau customer schimbat)."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:448 includes/admin/class-settings.php:69 includes/admin/class-settings.php:84 includes/admin/class-templates-admin.php:77
+msgid "Permisiune insuficientă."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:457
+msgid "Token invalid."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:460
+msgid "Tip necunoscut."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:463
+msgid "Parte necunoscută."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:478
+msgid "Fișier inexistent."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:71
+msgid "Design personalizat"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:77
+msgid "Culoare produs (aleasă de client):"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:80
+msgid "— preview-urile de mai jos au culoarea deja aplicată."
+msgstr ""
+
+#: includes/admin/class-order-admin.php:87
+msgid "Descarcă PNG Față"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:92
+msgid "Descarcă PNG Spate"
+msgstr ""
+
+#: includes/admin/class-order-admin.php:97
+msgid "Descarcă preview PNG"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:105
+msgid "Zonă imprimabilă — Față"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:106
+msgid "Zonă imprimabilă — Spate"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:111
+msgid "Tip produs"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:113
+msgid "— Personalizat —"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:120
+msgid "Alege tipul ca să pornești de la o zonă predefinită, apoi ajusteaz-o cu mouse-ul pe mockup."
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:150
+msgid "Setează întâi mockup-ul acestei părți ca să poți delimita zona."
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:161
+msgid "Ce iese din chenar nu apare la imprimare — designul clientului este decupat la această zonă."
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:191
+msgid "Mockup per culoare"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:199
+msgid "Alege atributul care schimbă mockup-ul (de obicei Culoare)."
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:234
+msgid "Culorile fără mockup propriu folosesc mockup-ul global de mai sus."
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:255
+msgid "Selectează"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:30 includes/admin/class-templates-admin.php:46 includes/admin/class-templates-admin.php:47
+msgid "Product Designer"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:50
+msgid "Activează designer"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:52
+msgid "Permite clientului să personalizeze acest produs."
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:58
+msgid "Mockup Față"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:65 includes/admin/class-product-metabox.php:82
+msgid "Selectează imagine"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:66 includes/admin/class-product-metabox.php:83 includes/admin/class-product-metabox.php:256 includes/admin/class-templates-admin.php:186 includes/api/class-rest-constructor.php:239
+msgid "Șterge"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:69
+msgid "Canvas-ul editorului va avea dimensiunea nativă a acestei imagini. Textele și imaginile adăugate de client sunt returnate în coordonate raportate la pixelii mockup-ului."
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:75
+msgid "Mockup Spate (opțional)"
+msgstr ""
+
+#: includes/admin/class-product-metabox.php:86
+msgid "Dacă setezi și mockup-ul de spate, clientul va putea personaliza ambele părți (apar tab-uri Față / Spate în editor)."
+msgstr ""
+
+#: includes/admin/class-settings.php:108
+msgid "Zile retenție fișiere personalizare"
+msgstr ""
+
+#: includes/admin/class-settings.php:122
+msgid "Designurile și imaginile încărcate de clienți care nu au ajuns într-o comandă sau coș activ se șterg după acest număr de zile. Default: 14."
+msgstr ""
+
+#: includes/admin/class-settings.php:132 includes/admin/class-templates-admin.php:149
+msgid "Status"
+msgstr ""
+
+#: includes/admin/class-settings.php:135
+msgid "Următoarea rulare programată"
+msgstr ""
+
+#: includes/admin/class-settings.php:141
+msgid "Neprogramat"
+msgstr ""
+
+#: includes/admin/class-settings.php:147
+msgid "Ultima rulare"
+msgstr ""
+
+#: includes/admin/class-settings.php:157
+msgid "Șterse: %1$d fișiere design + %2$d atașamente. Păstrate: %3$d designuri + %4$d atașamente."
+msgstr ""
+
+#: includes/admin/class-settings.php:166
+msgid "Nu a rulat încă."
+msgstr ""
+
+#: includes/admin/class-settings.php:175
+msgid "Rulează curățarea acum"
+msgstr ""
+
+#: includes/admin/class-settings.php:31 includes/admin/class-settings.php:32
+msgid "Setări"
+msgstr ""
+
+#: includes/admin/class-settings.php:95
+msgid "Product Designer — Setări"
+msgstr ""
+
+#: includes/admin/class-settings.php:99
+msgid "Curățarea a rulat."
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:111
+msgid "Templates Constructor"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:113
+msgid "Adaugă template nou"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:118
+msgid "Template-urile sunt produse personalizabile afișate doar în pagina Constructor. Ele NU apar în shop-ul obișnuit și NU sunt vizibile în lista standard de produse WooCommerce."
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:125
+msgid "Toate"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:145
+msgid "Nume"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:146
+msgid "Tip"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:147
+msgid "Preț"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:148
+msgid "Categorie"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:150
+msgid "Mockup"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:158
+msgid "Niciun template încă. Folosește butonul „Adaugă template nou\" de mai sus."
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:185
+msgid "Editează"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:197
+msgid "Lipsă"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:255
+msgid "Template Constructor"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:256
+msgid "Acest produs e configurat ca template. Va apărea în pagina Constructor și va fi ascuns din shop. Configurează: nume, preț, mockup (tab Product Designer), categorie (Categorii constructor), variații dacă vrei mărimi/culori."
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:304
+msgid "Designer Template"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:319
+msgid "Marchează ca template Constructor"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:323
+msgid "Bifează ca produsul să apară în pagina Constructor și să fie ascuns din shop-ul normal."
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:332 includes/core/class-templates.php:47
+msgid "Categorie Constructor"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:349
+msgid "Niciuna categorie definită încă. %s"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:350
+msgid "Adaugă categorii"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:58 includes/admin/class-templates-admin.php:59
+msgid "Templates"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:68
+msgid "Categorii constructor"
+msgstr ""
+
+#: includes/admin/class-templates-admin.php:69
+msgid "Categorii"
+msgstr ""
+
+#: includes/api/class-rest-api.php:103 includes/api/class-rest-constructor.php:199
+msgid "Produs invalid sau designer dezactivat."
+msgstr ""
+
+#: includes/api/class-rest-api.php:193
+msgid "Design inexistent."
+msgstr ""
+
+#: includes/api/class-rest-api.php:74
+msgid "Nonce invalid."
+msgstr ""
+
+#: includes/api/class-rest-api.php:87 includes/core/class-image-handler.php:40
+msgid "Niciun fișier trimis."
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:129
+msgid "Categorie invalidă."
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:236 includes/frontend/class-constructor-shortcode.php:70 includes/frontend/class-frontend.php:98 includes/frontend/class-frontend.php:134
+msgid "Personalizează"
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:237 includes/frontend/class-constructor-shortcode.php:83 includes/frontend/class-frontend.php:99
+msgid "Adaugă text"
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:238 includes/frontend/class-constructor-shortcode.php:84 includes/frontend/class-frontend.php:100
+msgid "Încarcă imagine"
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:240 includes/frontend/class-frontend.php:102
+msgid "Salvează designul"
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:241 includes/frontend/class-frontend.php:104
+msgid "Închide"
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:242 includes/frontend/class-constructor-shortcode.php:76 includes/frontend/class-constructor-shortcode.php:86 includes/frontend/class-frontend.php:105
+msgid "Se încarcă..."
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:243 includes/frontend/class-constructor-shortcode.php:87 includes/frontend/class-frontend.php:106
+msgid "Se salvează..."
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:244 includes/frontend/class-constructor-shortcode.php:88 includes/frontend/class-frontend.php:107
+msgid "Design salvat."
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:245 includes/core/class-image-handler.php:53 includes/frontend/class-constructor-shortcode.php:89 includes/frontend/class-frontend.php:108
+msgid "Fișier prea mare."
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:246 includes/frontend/class-constructor-shortcode.php:90 includes/frontend/class-frontend.php:109
+msgid "Tip neacceptat."
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:247 includes/frontend/class-frontend.php:110
+msgid "Textul tău aici"
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:248 includes/frontend/class-constructor-shortcode.php:91 includes/frontend/class-frontend.php:111
+msgid "Adaugă cel puțin un element în design."
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:249 includes/frontend/class-frontend.php:112
+msgid "O parte din design iese din zona imprimabilă și nu va fi imprimată."
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:266
+msgid "Produsul nu e variabil."
+msgstr ""
+
+#: includes/api/class-rest-constructor.php:386 includes/frontend/class-constructor-shortcode.php:51
+msgid "Constructor produse"
+msgstr ""
+
+#: includes/core/class-design-storage.php:100
+msgid "Hanorac"
+msgstr ""
+
+#: includes/core/class-design-storage.php:105
+msgid "Pulover"
+msgstr ""
+
+#: includes/core/class-design-storage.php:110
+msgid "Chipiu"
+msgstr ""
+
+#: includes/core/class-design-storage.php:446
+msgid "Eroare preview."
+msgstr ""
+
+#: includes/core/class-design-storage.php:456
+msgid "Niciun preview valid."
+msgstr ""
+
+#: includes/core/class-design-storage.php:470
+msgid "Eroare JSON."
+msgstr ""
+
+#: includes/core/class-design-storage.php:95
+msgid "Tricou"
+msgstr ""
+
+#: includes/core/class-image-handler.php:103
+msgid "Nu s-a putut salva atașamentul."
+msgstr ""
+
+#: includes/core/class-image-handler.php:137
+msgid "Format preview invalid."
+msgstr ""
+
+#: includes/core/class-image-handler.php:141
+msgid "Preview PNG corupt."
+msgstr ""
+
+#: includes/core/class-image-handler.php:146
+msgid "Nu s-a putut crea folderul de upload."
+msgstr ""
+
+#: includes/core/class-image-handler.php:149
+msgid "Scriere preview eșuată."
+msgstr ""
+
+#: includes/core/class-image-handler.php:157
+msgid "Nu s-a putut crea folderul."
+msgstr ""
+
+#: includes/core/class-image-handler.php:161
+msgid "JSON invalid."
+msgstr ""
+
+#: includes/core/class-image-handler.php:164
+msgid "Scriere JSON eșuată."
+msgstr ""
+
+#: includes/core/class-image-handler.php:30
+msgid "Fișier invalid."
+msgstr ""
+
+#: includes/core/class-image-handler.php:37
+msgid "Fișier prea mare (limită server)."
+msgstr ""
+
+#: includes/core/class-image-handler.php:38
+msgid "Fișier prea mare (limită formular)."
+msgstr ""
+
+#: includes/core/class-image-handler.php:39
+msgid "Upload parțial. Reîncearcă."
+msgstr ""
+
+#: includes/core/class-image-handler.php:41
+msgid "Server fără folder temporar."
+msgstr ""
+
+#: includes/core/class-image-handler.php:42
+msgid "Scriere pe disc eșuată."
+msgstr ""
+
+#: includes/core/class-image-handler.php:43
+msgid "Upload blocat de server."
+msgstr ""
+
+#: includes/core/class-image-handler.php:45
+msgid "Eroare upload."
+msgstr ""
+
+#: includes/core/class-image-handler.php:49
+msgid "Upload suspect."
+msgstr ""
+
+#: includes/core/class-image-handler.php:59
+msgid "Tip fișier neacceptat."
+msgstr ""
+
+#: includes/core/class-image-handler.php:65
+msgid "Fișierul nu este o imagine validă."
+msgstr ""
+
+#: includes/core/class-page-installer.php:114
+msgid "Constructor"
+msgstr ""
+
+#: includes/core/class-templates.php:124
+msgid "Designer"
+msgstr ""
+
+#: includes/core/class-templates.php:133
+msgid "Template"
+msgstr ""
+
+#: includes/core/class-templates.php:135
+msgid "Personalizabil"
+msgstr ""
+
+#: includes/core/class-templates.php:46 includes/core/class-templates.php:48
+msgid "Categorii Constructor"
+msgstr ""
+
+#: includes/core/class-templates.php:49
+msgid "Toate categoriile"
+msgstr ""
+
+#: includes/core/class-templates.php:50
+msgid "Editează categoria"
+msgstr ""
+
+#: includes/core/class-templates.php:51
+msgid "Vizualizează categoria"
+msgstr ""
+
+#: includes/core/class-templates.php:52
+msgid "Actualizează categoria"
+msgstr ""
+
+#: includes/core/class-templates.php:53
+msgid "Adaugă categorie nouă"
+msgstr ""
+
+#: includes/core/class-templates.php:54
+msgid "Nume categorie nouă"
+msgstr ""
+
+#: includes/core/class-templates.php:55
+msgid "Caută categorii"
+msgstr ""
+
+#: includes/core/class-templates.php:56
+msgid "Nicio categorie găsită"
+msgstr ""
+
+#: includes/core/class-validator.php:105
+msgid "Designul este gol."
+msgstr ""
+
+#: includes/core/class-validator.php:54
+msgid "Payload invalid."
+msgstr ""
+
+#: includes/core/class-validator.php:61
+msgid "Design invalid."
+msgstr ""
+
+#: includes/core/class-validator.php:72
+msgid "Preview invalid."
+msgstr ""
+
+#: includes/core/class-validator.php:88
+msgid "Preview PNG invalid."
+msgstr ""
+
+#: includes/core/class-validator.php:93
+msgid "Designul depășește limita permisă."
+msgstr ""
+
+#: includes/core/class-validator.php:96
+msgid "Preview prea mare."
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:68
+msgid "Alege o categorie"
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:69
+msgid "Alege un produs de bază"
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:71
+msgid "Adaugă în coș"
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:72
+msgid "Schimbă categoria"
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:73
+msgid "Schimbă produsul"
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:74
+msgid "%d produse"
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:75
+msgid "1 produs"
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:77
+msgid "Nu există produse personalizabile în această categorie."
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:78
+msgid "Eroare la încărcare. Reîncearcă."
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:79
+msgid "Salvează designul înainte de a-l adăuga în coș."
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:80
+msgid "Se adaugă în coș..."
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:85 includes/frontend/class-frontend.php:101
+msgid "Șterge selecția"
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:92 includes/frontend/class-frontend.php:115 includes/woocommerce/class-cart.php:186 includes/woocommerce/class-order.php:94
+msgid "Culoare produs"
+msgstr ""
+
+#: includes/frontend/class-constructor-shortcode.php:93 includes/frontend/class-frontend.php:116
+msgid "Culoare originală"
+msgstr ""
+
+#: includes/frontend/class-frontend.php:103
+msgid "Anulează"
+msgstr ""
+
+#: includes/frontend/class-frontend.php:142
+msgid "Elimină design"
+msgstr ""
+
+#: includes/woocommerce/class-cart.php:54
+msgid "Te rugăm să personalizezi produsul înainte de a-l adăuga în coș."
+msgstr ""
+
+#: midy-product-designer.php:43
+msgid "Product Designer necesită WooCommerce activ."
+msgstr ""
+

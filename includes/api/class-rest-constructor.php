@@ -12,6 +12,7 @@
 namespace ProductDesigner\Api;
 
 use ProductDesigner\Core\Design_Storage;
+use ProductDesigner\Core\I18n_Polylang;
 use ProductDesigner\Core\Templates;
 use ProductDesigner\Core\Validator;
 use WP_Error;
@@ -38,10 +39,15 @@ final class Rest_Constructor {
     }
 
     public function routes() : void {
+        $lang_arg = [
+            'lang' => [ 'required' => false, 'type' => 'string', 'sanitize_callback' => 'sanitize_key' ],
+        ];
+
         register_rest_route( PD_REST_NS, '/constructor/categories', [
             'methods'             => WP_REST_Server::READABLE,
             'permission_callback' => '__return_true',
             'callback'            => [ $this, 'handle_categories' ],
+            'args'                => $lang_arg,
         ] );
 
         register_rest_route( PD_REST_NS, '/constructor/products', [
@@ -52,7 +58,7 @@ final class Rest_Constructor {
                 'category_id' => [ 'required' => true,  'type' => 'integer', 'sanitize_callback' => 'absint' ],
                 'page'        => [ 'required' => false, 'type' => 'integer', 'sanitize_callback' => 'absint' ],
                 'per_page'    => [ 'required' => false, 'type' => 'integer', 'sanitize_callback' => 'absint' ],
-            ],
+            ] + $lang_arg,
         ] );
 
         register_rest_route( PD_REST_NS, '/constructor/product-config', [
@@ -62,7 +68,7 @@ final class Rest_Constructor {
             'args'                => [
                 'product_id'   => [ 'required' => true,  'type' => 'integer', 'sanitize_callback' => 'absint' ],
                 'variation_id' => [ 'required' => false, 'type' => 'integer', 'sanitize_callback' => 'absint' ],
-            ],
+            ] + $lang_arg,
         ] );
 
         register_rest_route( PD_REST_NS, '/constructor/variations', [
@@ -71,7 +77,7 @@ final class Rest_Constructor {
             'callback'            => [ $this, 'handle_variations' ],
             'args'                => [
                 'product_id' => [ 'required' => true, 'type' => 'integer', 'sanitize_callback' => 'absint' ],
-            ],
+            ] + $lang_arg,
         ] );
     }
 
@@ -83,7 +89,10 @@ final class Rest_Constructor {
     public function handle_categories( WP_REST_Request $request ) {
         nocache_headers();
 
+        $lang  = $this->request_lang( $request );
         $items = [];
+        // Taxonomia pd_template_cat e netradusa intentionat: aceiasi termeni in
+        // toate limbile, doar numele difera (string translation).
         $terms = get_terms( [
             'taxonomy'   => Templates::TAXONOMY,
             'hide_empty' => false,
@@ -91,7 +100,7 @@ final class Rest_Constructor {
 
         if ( ! is_wp_error( $terms ) ) {
             foreach ( $terms as $term ) {
-                $count = $this->count_templates_in_term( (int) $term->term_id );
+                $count = $this->count_templates_in_term( (int) $term->term_id, $request, $lang );
                 if ( $count === 0 ) {
                     continue;
                 }
@@ -114,12 +123,13 @@ final class Rest_Constructor {
         $category_id = (int) $request->get_param( 'category_id' );
         $page        = max( 1, (int) ( $request->get_param( 'page' ) ?: 1 ) );
         $per_page    = max( 1, min( 48, (int) ( $request->get_param( 'per_page' ) ?: 12 ) ) );
+        $lang        = $this->request_lang( $request );
 
         if ( ! $category_id ) {
             return new WP_Error( 'pd_invalid_category', __( 'Categorie invalidă.', 'product-designer' ), [ 'status' => 400 ] );
         }
 
-        $query = new \WP_Query( [
+        $query = new \WP_Query( $this->with_language( [
             'post_type'      => 'product',
             'post_status'    => 'publish',
             'posts_per_page' => $per_page,
@@ -139,7 +149,7 @@ final class Rest_Constructor {
                     'value' => 'yes',
                 ],
             ],
-        ] );
+        ], $request, $lang ) );
 
         $items = [];
         foreach ( $query->posts as $product_id ) {
@@ -189,23 +199,12 @@ final class Rest_Constructor {
             return new WP_Error( 'pd_product_invalid', __( 'Produs invalid sau designer dezactivat.', 'product-designer' ), [ 'status' => 400 ] );
         }
 
-        $config   = $this->storage->get_product_config( $product_id );
-        $settings = $this->validator->settings();
-        $product  = wc_get_product( $product_id );
-
-        // Override mockup per variație dacă e setat — fiecare parte poate fi
-        // suprascrisă independent.
-        if ( $variation_id ) {
-            $var_front_id = (int) get_post_meta( $variation_id, Design_Storage::META_MOCKUP, true );
-            if ( $var_front_id ) {
-                $config['mockup_front_url'] = (string) wp_get_attachment_image_url( $var_front_id, 'full' );
-                $config['mockup_url']       = $config['mockup_front_url'];
-            }
-            $var_back_id = (int) get_post_meta( $variation_id, Design_Storage::META_MOCKUP_BACK, true );
-            if ( $var_back_id ) {
-                $config['mockup_back_url'] = (string) wp_get_attachment_image_url( $var_back_id, 'full' );
-            }
-        }
+        // Rezolvă mockup-ul pentru variația aleasă: per-culoare > per-variație >
+        // mockup global de produs. Logica e centralizată în Design_Storage.
+        $config     = $this->storage->resolve_config_for_variation( $product_id, $variation_id );
+        $settings   = $this->validator->settings();
+        $product    = wc_get_product( $product_id );
+        $print_size = $this->storage->print_size_for_variation( $product_id, $variation_id );
 
         return new WP_REST_Response( [
             'rest' => [
@@ -213,15 +212,21 @@ final class Rest_Constructor {
                 'nonce'      => wp_create_nonce( 'wp_rest' ),
                 'uploadPath' => 'upload',
                 'designPath' => 'design',
+                'lang'       => $this->request_lang( $request ),
             ],
             'product' => [
-                'id'               => $product_id,
-                'variation_id'     => $variation_id,
-                'mockup_front_url' => $config['mockup_front_url'],
-                'mockup_back_url'  => $config['mockup_back_url'],
-                'mockup_url'       => $config['mockup_front_url'], // legacy alias
-                'name'             => $product instanceof \WC_Product ? $product->get_name() : '',
-                'price_html'       => $product instanceof \WC_Product ? $product->get_price_html() : '',
+                'id'                => $product_id,
+                'variation_id'      => $variation_id,
+                'mockup_front_url'  => $config['mockup_front_url'],
+                'mockup_back_url'   => $config['mockup_back_url'],
+                'color_options'     => $this->storage->get_color_options( $product_id ),
+                'print_area'        => [ 'front' => $config['print_area']['front'] ?? null, 'back' => $config['print_area']['back'] ?? null ],
+                'print_sizes'       => $this->storage->print_sizes_for_editor( $product_id ),
+                // The chosen variation's print size: the editor frame starts at it.
+                'print_size'        => $print_size ? $print_size['slug'] : '',
+                'mockup_url'        => $config['mockup_front_url'], // legacy alias
+                'name'              => $product instanceof \WC_Product ? $product->get_name() : '',
+                'price_html'        => $product instanceof \WC_Product ? $product->get_price_html() : '',
             ],
             'canvas' => [
                 'width'  => (int) $settings['canvas_width'],
@@ -245,9 +250,10 @@ final class Rest_Constructor {
                 'badType'     => __( 'Tip neacceptat.',    'product-designer' ),
                 'placeholder' => __( 'Textul tău aici',    'product-designer' ),
                 'empty'       => __( 'Adaugă cel puțin un element în design.', 'product-designer' ),
+                'outOfBounds' => __( 'O parte din design iese din zona imprimabilă și nu va fi imprimată.', 'product-designer' ),
                 'sideFront'   => __( 'Față',               'product-designer' ),
                 'sideBack'    => __( 'Spate',              'product-designer' ),
-            ],
+            ] + \ProductDesigner\Frontend\Frontend::print_strings(),
         ], 200 );
     }
 
@@ -285,15 +291,15 @@ final class Rest_Constructor {
             ];
         }
 
-        // Lista de variații cu atribute + price + stock + mockup-uri (override per variație, gol → fallback la parent).
+        // Lista de variații cu atribute + price + stock + mockup-uri rezolvate
+        // (per-culoare > per-variație > mockup global de produs). `image_url` e
+        // poza de prezentare a variației (ex. produsul cu imprimeul la mărimea
+        // aleasă), afișată ca imagine principală în pasul de opțiuni.
         $variations = [];
         foreach ( $product->get_available_variations() as $v ) {
-            $vid          = (int) $v['variation_id'];
-            $var_obj      = wc_get_product( $vid );
-            $var_front_id = $var_obj instanceof \WC_Product ? (int) get_post_meta( $vid, Design_Storage::META_MOCKUP, true ) : 0;
-            $var_back_id  = $var_obj instanceof \WC_Product ? (int) get_post_meta( $vid, Design_Storage::META_MOCKUP_BACK, true ) : 0;
-            $var_front_url = $var_front_id ? (string) wp_get_attachment_image_url( $var_front_id, 'full' ) : '';
-            $var_back_url  = $var_back_id  ? (string) wp_get_attachment_image_url( $var_back_id,  'full' ) : '';
+            $vid       = (int) $v['variation_id'];
+            $resolved  = $this->storage->resolve_config_for_variation( $product_id, $vid );
+            $image_id  = (int) ( $v['image_id'] ?? 0 );
 
             $variations[] = [
                 'id'               => $vid,
@@ -301,20 +307,23 @@ final class Rest_Constructor {
                 'price_html'       => $v['price_html']  ?? '',
                 'is_in_stock'      => ! empty( $v['is_in_stock'] ),
                 'is_purchasable'   => ! empty( $v['is_purchasable'] ),
-                'mockup_front_url' => $var_front_url,
-                'mockup_back_url'  => $var_back_url,
-                'mockup_url'       => $var_front_url, // legacy alias
+                'image_url'        => $image_id ? (string) wp_get_attachment_image_url( $image_id, 'large' ) : '',
+                'description'      => trim( wp_strip_all_tags( $v['variation_description'] ?? '' ) ),
+                'mockup_front_url' => $resolved['mockup_front_url'],
+                'mockup_back_url'  => $resolved['mockup_back_url'],
+                'mockup_url'       => $resolved['mockup_front_url'], // legacy alias
             ];
         }
 
         return new WP_REST_Response( [
             'attributes' => $attributes,
+            'defaults'   => (object) $product->get_default_attributes(),
             'variations' => $variations,
         ], 200 );
     }
 
-    private function count_templates_in_term( int $term_id ) : int {
-        $query = new \WP_Query( [
+    private function count_templates_in_term( int $term_id, WP_REST_Request $request, string $lang ) : int {
+        $query = new \WP_Query( $this->with_language( [
             'post_type'      => 'product',
             'post_status'    => 'publish',
             'posts_per_page' => 1,
@@ -333,15 +342,46 @@ final class Rest_Constructor {
                     'value' => 'yes',
                 ],
             ],
-        ] );
+        ], $request, $lang ) );
         return (int) $query->found_posts;
+    }
+
+    /**
+     * Limba ceruta de client, validata; cade pe limba implicita.
+     * Sir gol daca Polylang nu e activ.
+     */
+    private function request_lang( WP_REST_Request $request ) : string {
+        $lang = I18n_Polylang::sanitize_lang( (string) $request->get_param( 'lang' ) );
+        return $lang !== '' ? $lang : I18n_Polylang::default_lang();
+    }
+
+    /**
+     * Adauga filtrul de limba pe un WP_Query din context REST.
+     *
+     * Polylang filtreaza singur query-urile dintr-un request REST, dar numai
+     * daca requestul poarta parametrul lang (PLL_REST_Post::can_filter_query).
+     * Fara el am intoarce template-urile din toate limbile amestecate — fiecare
+     * produs de cate ori are traduceri — deci filtram noi, explicit, pe limba
+     * implicita.
+     */
+    private function with_language( array $args, WP_REST_Request $request, string $lang ) : array {
+        if ( $lang === '' || $request->get_param( 'lang' ) ) {
+            return $args; // Fara Polylang, sau Polylang filtreaza deja.
+        }
+        $args['tax_query']   = isset( $args['tax_query'] ) ? (array) $args['tax_query'] : [];
+        $args['tax_query'][] = [
+            'taxonomy' => 'language',
+            'field'    => 'slug',
+            'terms'    => $lang,
+        ];
+        return $args;
     }
 
     private function format_category( \WP_Term $term, int $count, int $order, int $icon_id ) : array {
         $icon_url = $icon_id ? (string) wp_get_attachment_image_url( $icon_id, 'medium' ) : '';
         return [
             'id'       => (int) $term->term_id,
-            'name'     => $term->name,
+            'name'     => I18n_Polylang::term_label( $term ),
             'slug'     => $term->slug,
             'icon_url' => $icon_url,
             'count'    => $count,

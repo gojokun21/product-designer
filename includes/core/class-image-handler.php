@@ -104,6 +104,20 @@ final class Image_Handler {
         }
         wp_update_attachment_metadata( $attachment_id, wp_generate_attachment_metadata( $attachment_id, $moved['file'] ) );
 
+        // Marker so the cleanup cron can identify attachments owned by the designer
+        // and never touches unrelated Media Library entries.
+        update_post_meta( $attachment_id, Cleanup::ATTACHMENT_FLAG_META, '1' );
+
+        // Media e traductibila pe site-urile Polylang: un atasament fara limba
+        // apare ca orfan in Media Library si scapa din query-urile filtrate.
+        // Uploadul vine prin REST, unde Polylang nu deduce singur limba.
+        if ( I18n_Polylang::is_active() && function_exists( 'pll_set_post_language' ) ) {
+            $lang = I18n_Polylang::current_lang();
+            if ( $lang !== '' ) {
+                pll_set_post_language( (int) $attachment_id, $lang );
+            }
+        }
+
         return [
             'ok'            => true,
             'url'           => $moved['url'],

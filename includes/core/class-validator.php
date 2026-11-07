@@ -19,6 +19,7 @@ final class Validator {
             'allowed_mime_types' => [ 'image/png', 'image/jpeg', 'image/webp' ],
             'canvas_width'       => 600,
             'canvas_height'      => 700,
+            'retention_days'     => 14,
         ];
         $stored = get_option( 'pd_settings', [] );
         return wp_parse_args( is_array( $stored ) ? $stored : [], $defaults );
@@ -114,5 +115,61 @@ final class Validator {
     public function verify_rest_nonce( \WP_REST_Request $request ) : bool {
         $nonce = $request->get_header( 'X-WP-Nonce' );
         return $nonce && wp_verify_nonce( $nonce, 'wp_rest' );
+    }
+
+    /**
+     * Strict #rrggbb sanitizer for the custom mockup color. Returns '' on
+     * anything that isn't a 6-digit hex (short hex is expanded).
+     */
+    public static function sanitize_hex( $value ) : string {
+        if ( ! is_string( $value ) || $value === '' ) {
+            return '';
+        }
+        $value = trim( $value );
+        if ( preg_match( '/^#([0-9a-f]{3})$/i', $value, $m ) ) {
+            $c = str_split( strtolower( $m[1] ) );
+            return '#' . $c[0] . $c[0] . $c[1] . $c[1] . $c[2] . $c[2];
+        }
+        if ( preg_match( '/^#[0-9a-f]{6}$/i', $value ) ) {
+            return strtolower( $value );
+        }
+        return '';
+    }
+
+    /**
+     * Best-effort hex for a color term slug, used as a fallback for the swatch
+     * dot when the store hasn't set an explicit swatch color on the term.
+     * Covers the common Romanian + English color names. Returns '' when unknown.
+     */
+    public static function color_from_slug( string $slug ) : string {
+        static $map = [
+            'alb'        => '#ffffff',
+            'white'      => '#ffffff',
+            'negru'      => '#111111',
+            'black'      => '#111111',
+            'gri'        => '#9aa0a6',
+            'grey'       => '#9aa0a6',
+            'gray'       => '#9aa0a6',
+            'rosu'       => '#e11d2a',
+            'red'        => '#e11d2a',
+            'albastru'   => '#1d4ed8',
+            'blue'       => '#1d4ed8',
+            'verde'      => '#16a34a',
+            'green'      => '#16a34a',
+            'galben'     => '#facc15',
+            'yellow'     => '#facc15',
+            'roz'        => '#ec4899',
+            'pink'       => '#ec4899',
+            'mov'        => '#7c3aed',
+            'purple'     => '#7c3aed',
+            'maro'       => '#7c4a1e',
+            'brown'      => '#7c4a1e',
+            'bej'        => '#e3d5b8',
+            'beige'      => '#e3d5b8',
+            'portocaliu' => '#f97316',
+            'orange'     => '#f97316',
+        ];
+        $key = strtolower( trim( $slug ) );
+        return $map[ $key ] ?? '';
     }
 }

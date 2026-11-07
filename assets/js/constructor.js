@@ -419,6 +419,7 @@
         addInput('pd_preview_url',      $root.find('.pd-preview-url').val());
         addInput('pd_preview_back_url', $root.find('.pd-preview-back-url').val());
         addInput('pd_json_url',         $root.find('.pd-json-url').val());
+        addInput('pd_mockup_color',     $root.find('.pd-mockup-color-value').val());
         addInput('pd_from_constructor', '1');
 
         $form.trigger('submit');

@@ -13,6 +13,8 @@
 namespace ProductDesigner\Woocommerce;
 
 use ProductDesigner\Core\Design_Storage;
+use ProductDesigner\Core\I18n_Polylang;
+use ProductDesigner\Core\Validator;
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
@@ -30,29 +32,84 @@ final class Cart {
         add_filter( 'woocommerce_add_cart_item_data',         [ $this, 'capture_design' ], 10, 3 );
         add_filter( 'woocommerce_get_item_data',              [ $this, 'display_in_cart' ], 10, 2 );
         add_filter( 'woocommerce_cart_item_thumbnail',        [ $this, 'replace_thumbnail' ], 10, 3 );
-        add_filter( 'woocommerce_add_to_cart_validation',     [ $this, 'validate_cart_add' ], 10, 2 );
+        add_filter( 'woocommerce_add_to_cart_validation',     [ $this, 'validate_cart_add' ], 10, 5 );
+        // The second-side price goes on the line's product object. Both hooks
+        // get a freshly loaded product (on add, and on every cart load from the
+        // session), so the price is raised exactly once per request.
+        add_filter( 'woocommerce_add_cart_item',              [ $this, 'apply_extra_price' ], 20, 1 );
+        add_filter( 'woocommerce_get_cart_item_from_session', [ $this, 'apply_extra_price' ], 20, 1 );
     }
 
-    public function validate_cart_add( bool $passed, int $product_id ) : bool {
-        if ( ! $this->storage->is_enabled_for_product( $product_id ) ) {
-            return $passed;
+    /**
+     * @param bool  $passed
+     * @param int   $product_id
+     * @param int   $quantity
+     * @param int   $variation_id
+     * @param array $variations   `attribute_*` => slug for variable products.
+     */
+    public function validate_cart_add( $passed, $product_id, $quantity = 1, $variation_id = 0, $variations = [] ) : bool {
+        $product_id = (int) $product_id;
+        if ( ! $passed || ! $this->storage->is_enabled_for_product( $product_id ) ) {
+            return (bool) $passed;
         }
         // If designer is enabled, customer MUST save a design before adding to cart.
-        $design_id = isset( $_POST['pd_design_id'] ) ? sanitize_text_field( wp_unslash( $_POST['pd_design_id'] ) ) : '';
-
-        // Fallback pe WC Session (pentru AJAX add-to-cart / Store API / blocks).
-        if ( $design_id === '' && function_exists( 'WC' ) && WC()->session ) {
-            $saved = WC()->session->get( 'pd_design_for_' . $product_id );
-            if ( is_array( $saved ) && ! empty( $saved['design_id'] ) ) {
-                $design_id = (string) $saved['design_id'];
-            }
-        }
-
-        if ( $design_id === '' ) {
+        $design = $this->submitted_design( $product_id );
+        if ( $design['design_id'] === '' ) {
             wc_add_notice( __( 'Te rugăm să personalizezi produsul înainte de a-l adăuga în coș.', 'product-designer' ), 'error' );
             return false;
         }
-        return $passed;
+
+        // The price depends on the print size, and the editor frame follows it:
+        // a design saved for "Mare" must not be bought as "Mic".
+        $size = $this->storage->print_size_for_variation( $product_id, (int) $variation_id, (array) $variations );
+        if ( $size ) {
+            $made_for = $this->storage->print_size_of( $product_id, $this->storage->design_print_size( $design['design_id'] ) );
+            if ( ! $made_for || $made_for['slug'] !== $size['slug'] ) {
+                wc_add_notice( __( 'Designul a fost salvat pentru altă mărime de imprimeu. Deschide editorul, verifică designul și salvează-l din nou.', 'product-designer' ), 'error' );
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The design that goes with an add-to-cart: the hidden `pd_*` fields from
+     * the form, else the last one saved in the WC session (REST save) for AJAX /
+     * Store API add-to-cart paths that don't post them.
+     *
+     * @return array{design_id:string,preview_url:string,preview_back_url:string,json_url:string,mockup_color:string}
+     */
+    private function submitted_design( int $product_id ) : array {
+        $design_id = isset( $_POST['pd_design_id'] ) ? sanitize_text_field( wp_unslash( $_POST['pd_design_id'] ) ) : '';
+        if ( $design_id !== '' ) {
+            return [
+                'design_id'        => $design_id,
+                'preview_url'      => isset( $_POST['pd_preview_url'] )      ? esc_url_raw( wp_unslash( $_POST['pd_preview_url'] ) )              : '',
+                'preview_back_url' => isset( $_POST['pd_preview_back_url'] ) ? esc_url_raw( wp_unslash( $_POST['pd_preview_back_url'] ) )         : '',
+                'json_url'         => isset( $_POST['pd_json_url'] )         ? esc_url_raw( wp_unslash( $_POST['pd_json_url'] ) )                 : '',
+                'mockup_color'     => isset( $_POST['pd_mockup_color'] )     ? Validator::sanitize_hex( wp_unslash( $_POST['pd_mockup_color'] ) ) : '',
+            ];
+        }
+
+        $saved = $this->session_design( $product_id );
+        if ( ! empty( $saved['design_id'] ) ) {
+            $this->debug_log( 'submitted_design: design_id preluat din WC Session: ' . $saved['design_id'] );
+        }
+        return [
+            'design_id'        => (string) ( $saved['design_id'] ?? '' ),
+            'preview_url'      => (string) ( $saved['preview_url'] ?? '' ),
+            'preview_back_url' => (string) ( $saved['preview_back_url'] ?? '' ),
+            'json_url'         => (string) ( $saved['json_url'] ?? '' ),
+            'mockup_color'     => Validator::sanitize_hex( $saved['mockup_color'] ?? '' ),
+        ];
+    }
+
+    public function apply_extra_price( $cart_item ) {
+        $extra = (float) ( $cart_item['pd_design']['extra_price'] ?? 0 );
+        if ( $extra > 0 && isset( $cart_item['data'] ) && $cart_item['data'] instanceof \WC_Product ) {
+            $cart_item['data']->set_price( (float) $cart_item['data']->get_price( 'edit' ) + $extra );
+        }
+        return $cart_item;
     }
 
     public function capture_design( array $cart_item_data, int $product_id, int $variation_id ) : array {
@@ -61,23 +118,12 @@ final class Cart {
             return $cart_item_data;
         }
 
-        // 1) Calea clasică: hidden inputs din form.cart ajung în $_POST.
-        $design_id        = isset( $_POST['pd_design_id'] )        ? sanitize_text_field( wp_unslash( $_POST['pd_design_id'] ) )        : '';
-        $preview_url      = isset( $_POST['pd_preview_url'] )      ? esc_url_raw( wp_unslash( $_POST['pd_preview_url'] ) )              : '';
-        $preview_back_url = isset( $_POST['pd_preview_back_url'] ) ? esc_url_raw( wp_unslash( $_POST['pd_preview_back_url'] ) )         : '';
-        $json_url         = isset( $_POST['pd_json_url'] )         ? esc_url_raw( wp_unslash( $_POST['pd_json_url'] ) )                 : '';
-
-        // 2) Fallback: citește din WC Session (completat de REST la save).
-        if ( $design_id === '' && function_exists( 'WC' ) && WC()->session ) {
-            $saved = WC()->session->get( 'pd_design_for_' . $product_id );
-            if ( is_array( $saved ) && ! empty( $saved['design_id'] ) ) {
-                $design_id        = (string) $saved['design_id'];
-                $preview_url      = (string) ( $saved['preview_url'] ?? '' );
-                $preview_back_url = (string) ( $saved['preview_back_url'] ?? '' );
-                $json_url         = (string) ( $saved['json_url'] ?? '' );
-                $this->debug_log( "capture_design: design_id preluat din WC Session: $design_id" );
-            }
-        }
+        $design           = $this->submitted_design( $product_id );
+        $design_id        = $design['design_id'];
+        $preview_url      = $design['preview_url'];
+        $preview_back_url = $design['preview_back_url'];
+        $json_url         = $design['json_url'];
+        $mockup_color     = $design['mockup_color'];
 
         $this->debug_log( sprintf(
             'capture_design: product=%d, design_id="%s", POST keys: %s',
@@ -117,16 +163,47 @@ final class Cart {
             return $cart_item_data;
         }
 
+        // The variation price covers one print position; a design on both sides
+        // pays the print size's second-side price on top.
+        $size  = $this->storage->print_size_for_variation( $product_id, $variation_id );
+        $extra = ( $size && $preview_url !== '' && $preview_back_url !== '' ) ? $size['second_side_price'] : 0.0;
+
         $cart_item_data['pd_design'] = [
             'design_id'        => $design_id,
             'preview_url'      => $preview_url,
             'preview_back_url' => $preview_back_url,
             'json_url'         => $json_url,
+            'mockup_color'     => $mockup_color,
+            'print_size'       => $size ? $size['slug'] : '',
+            'extra_price'      => $extra,
             // Unique key forces WC to treat items with different designs as separate rows.
             'unique_key'       => md5( $design_id ),
         ];
         $this->debug_log( "capture_design: OK — design_id $design_id atașat la cart item (front=" . ( $preview_url ? 'da' : 'nu' ) . ", back=" . ( $preview_back_url ? 'da' : 'nu' ) . ")." );
         return $cart_item_data;
+    }
+
+    /**
+     * Designul salvat in WC Session pentru produs sau pentru oricare dintre
+     * traducerile lui.
+     *
+     * Polylang for WooCommerce traduce ID-ul produsului la add-to-cart
+     * (filtrul woocommerce_add_to_cart_product_id), deci ID-ul care ajunge aici
+     * poate sa nu fie cel sub care REST-ul a salvat designul in sesiune.
+     *
+     * @return array Randul din sesiune, sau array gol.
+     */
+    private function session_design( int $product_id ) : array {
+        if ( ! function_exists( 'WC' ) || ! WC()->session ) {
+            return [];
+        }
+        foreach ( I18n_Polylang::translation_ids( $product_id ) as $id ) {
+            $saved = WC()->session->get( 'pd_design_for_' . $id );
+            if ( is_array( $saved ) && ! empty( $saved['design_id'] ) ) {
+                return $saved;
+            }
+        }
+        return [];
     }
 
     private function debug_log( string $msg ) : void {
@@ -135,25 +212,59 @@ final class Cart {
         }
     }
 
+    /**
+     * „Față + spate (+75 lei)" — where the design is printed and what the
+     * second side added to the price.
+     */
+    public static function print_sides_label( array $design ) : string {
+        $sides = [];
+        if ( ! empty( $design['preview_url'] ) ) {
+            $sides[] = __( 'Față', 'product-designer' );
+        }
+        if ( ! empty( $design['preview_back_url'] ) ) {
+            $sides[] = $sides ? mb_strtolower( __( 'Spate', 'product-designer' ) ) : __( 'Spate', 'product-designer' );
+        }
+        $label = implode( ' + ', $sides );
+        $extra = (float) ( $design['extra_price'] ?? 0 );
+        if ( $label !== '' && $extra > 0 ) {
+            $label .= ' (+' . Design_Storage::price_text( $extra ) . ')';
+        }
+        return $label;
+    }
+
     public function display_in_cart( array $item_data, array $cart_item ) : array {
-        $front = (string) ( $cart_item['pd_design']['preview_url']      ?? '' );
-        $back  = (string) ( $cart_item['pd_design']['preview_back_url'] ?? '' );
-        if ( $front === '' && $back === '' ) {
-            return $item_data;
+        $sides = isset( $cart_item['pd_design'] ) && is_array( $cart_item['pd_design'] ) ? self::print_sides_label( $cart_item['pd_design'] ) : '';
+        if ( $sides !== '' ) {
+            $item_data[] = [
+                'key'   => __( 'Imprimeu pe', 'product-designer' ),
+                'value' => esc_html( $sides ),
+            ];
         }
-        $img_style = 'max-width:90px;height:auto;vertical-align:middle;border:1px solid #eee;padding:2px;background:#fff;margin-right:6px;';
-        $html = '';
-        if ( $front !== '' ) {
-            $html .= '<img src="' . esc_url( $front ) . '" alt="" title="' . esc_attr__( 'Față', 'product-designer' ) . '" style="' . esc_attr( $img_style ) . '" />';
+
+        // Preview-ul design-ului NU se mai listează ca rând de meta („Design")
+        // — thumbnail-ul produsului din coș e deja înlocuit cu preview-ul
+        // (replace_thumbnail), deci rândul ar dubla aceeași imagine.
+        $color = Validator::sanitize_hex( $cart_item['pd_design']['mockup_color'] ?? '' );
+        if ( $color !== '' ) {
+            // „Alb" în loc de #ffffff când hex-ul corespunde termenului de
+            // variație; culorile custom (fără termen) rămân afișate ca hex.
+            $name  = $this->storage->color_label_for_variation( $color, (array) ( $cart_item['variation'] ?? [] ) );
+            $label = $name !== '' ? esc_html( $name ) : '<code>' . esc_html( $color ) . '</code>';
+            // Fără `display`/`width`/`height` — wp_kses_post (aplicat de WC la
+            // afișare) elimină `display`, iar span-ul inline ar colapsa într-o
+            // liniuță. Padding-ul dă lățimea, iar font-size:0 anulează înălțimea
+            // moștenită din font (altfel cercul iese pastilă ovală).
+            $swatch = sprintf(
+                '<span style="padding:6px;font-size:0;line-height:0;background:%s;border:1px solid #ccc;border-radius:50%%;margin-right:6px;vertical-align:middle;">&nbsp;</span>%s',
+                esc_attr( $color ),
+                $label
+            );
+            $item_data[] = [
+                'key'     => __( 'Culoare produs', 'product-designer' ),
+                'value'   => wp_kses_post( $swatch ),
+                'display' => '',
+            ];
         }
-        if ( $back !== '' ) {
-            $html .= '<img src="' . esc_url( $back )  . '" alt="" title="' . esc_attr__( 'Spate', 'product-designer' ) . '" style="' . esc_attr( $img_style ) . '" />';
-        }
-        $item_data[] = [
-            'key'     => __( 'Design', 'product-designer' ),
-            'value'   => wp_kses_post( $html ),
-            'display' => '',
-        ];
         return $item_data;
     }
 
@@ -165,8 +276,10 @@ final class Cart {
         if ( $url === '' ) {
             return $thumbnail;
         }
+        // Fără sizing inline — imaginea umple containerul temei
+        // (.cart_item_image img: 100%/100%, object-fit cover).
         return sprintf(
-            '<img src="%s" alt="" class="pd-cart-thumb" style="max-width:64px;height:auto;" />',
+            '<img src="%s" alt="" class="pd-cart-thumb" />',
             esc_url( $url )
         );
     }

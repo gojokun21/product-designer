@@ -1,0 +1,777 @@
+/* Product Designer — Constructor wizard
+   Reutilizează clasele .pd-tools, .pd-canvas-wrap etc. din designer.css.
+   Redesign 2026 — Minimal & premium, aliniat la brand-ul midy (Onest, negru + accent #5d839d). */
+
+/* Design tokens sunt definite în designer.css (încărcat în ambele fluxuri). */
+
+.pd-constructor {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 20px 72px;
+    font-family: var(--pd-font);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--pd-text);
+    -webkit-font-smoothing: antialiased;
+}
+.pd-constructor[aria-busy="true"] { cursor: wait; }
+.pd-constructor[aria-busy="true"] * { pointer-events: none; }
+
+/* Step 3 (designer) — pe desktop folosim FULL VIEWPORT (position: fixed inset 0).
+   Asta elimină:
+   - Constrângerea de parent container (.entry-content / theme wrappers care au max-width).
+   - Padding-ul mare al .pd-constructor (24+60 = 84px chrome).
+   - Header-ul cu progress steps (consumă ~80px vertical fără valoare în designer mode).
+   Layout-ul devine: slim top bar (~50px) | designer (umple restul, ~100dvh - 50px).
+   Pe 1080: 1030px height pentru mockup → mockup portrait 6/7 = 883×1030 (de la 797×930).
+   E pattern-ul standard pentru design tools (Canva, Figma, Photopea). */
+.pd-constructor[data-step="3"] {
+    position: fixed;
+    inset: 0;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    /* z-index 100000 = peste WP admin bar (99999) → designer ocupă full viewport
+       fără ca admin bar să acopere top 32px. Match cu .pd-modal z-index. */
+    z-index: 100000;
+    background: var(--pd-stage);
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100dvh;
+    overflow: hidden;
+}
+@supports not (height: 100dvh) {
+    .pd-constructor[data-step="3"] {
+        height: calc(var(--pd-vh, 1vh) * 100);
+    }
+}
+
+/* Big page header (titlu + progress steps) — ascuns când e activ step 3.
+   În locul lui apare slim top bar (.pd-step3-bar — vezi mai jos pe desktop). */
+.pd-constructor[data-step="3"] > .pd-constructor__header {
+    display: none;
+}
+
+/* Pașii 1, 2, 2.5 — ascunși când step 3 e activ (sunt deja hidden via JS,
+   dar dacă vreun panel are bg moștenit, asta îl ascunde garantat). */
+.pd-constructor[data-step="3"] .pd-constructor__panel:not([data-panel="3"]) {
+    display: none;
+}
+
+/* Panel 3 ocupă restul (grid row 2), fără padding: panourile editorului merg
+   până la margini și se despart prin linii fine. */
+.pd-constructor[data-step="3"] .pd-constructor__panel[data-panel="3"] {
+    grid-row: 2;
+    padding: 0;
+    overflow: hidden;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Breadcrumb-ul interior din panel 3 — ascuns pe desktop (înlocuit de step3-bar). */
+.pd-constructor[data-step="3"] .pd-constructor__panel[data-panel="3"] .pd-breadcrumb {
+    display: none;
+}
+
+/* Header + progress */
+.pd-constructor__header {
+    margin-bottom: 40px;
+    text-align: center;
+}
+.pd-constructor__title {
+    margin: 0 0 26px;
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    color: var(--pd-text);
+}
+
+.pd-progress {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+}
+.pd-progress__step {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--pd-text-faint);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .01em;
+    position: relative;
+    transition: color .3s var(--pd-ease);
+}
+.pd-progress__step + .pd-progress__step::before {
+    content: '';
+    width: 44px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--pd-border);
+    margin: 0 16px;
+    transition: background-color .35s var(--pd-ease);
+}
+.pd-progress__num {
+    display: inline-flex;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #f1f1f1;
+    color: var(--pd-text-faint);
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    border: 1.5px solid transparent;
+    transition: background-color .3s var(--pd-ease), color .3s var(--pd-ease),
+                box-shadow .3s var(--pd-ease), border-color .3s var(--pd-ease);
+}
+.pd-progress__step.is-active { color: var(--pd-text); }
+.pd-progress__step.is-active .pd-progress__num {
+    background: var(--pd-surface);
+    color: var(--pd-accent);
+    border-color: var(--pd-accent);
+    box-shadow: 0 0 0 4px var(--pd-accent-soft);
+}
+.pd-progress__step.is-done { color: var(--pd-accent); }
+.pd-progress__step.is-done + .pd-progress__step::before,
+.pd-progress__step.is-active::before { background: var(--pd-accent); }
+.pd-progress__step.is-done .pd-progress__num { background: var(--pd-accent); color: #fff; }
+.pd-progress__step.is-done .pd-progress__num::after { content: '✓'; }
+.pd-progress__step.is-done .pd-progress__num span { display: none; }
+
+/* Panels */
+.pd-constructor__panel {
+    animation: pd-fade-in .25s ease;
+}
+@keyframes pd-fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.pd-panel__heading {
+    margin: 0 0 24px;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -.015em;
+    text-align: center;
+    color: var(--pd-text);
+}
+
+/* Breadcrumb (steps 2 + 3) */
+.pd-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 22px;
+    font-size: 14px;
+    color: var(--pd-text-muted);
+    flex-wrap: wrap;
+}
+.pd-breadcrumb__back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--pd-surface);
+    border: 1px solid var(--pd-border);
+    padding: 9px 16px;
+    border-radius: var(--pd-radius-pill);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--pd-text-muted);
+    font-family: inherit;
+    transition: border-color .2s var(--pd-ease), background-color .2s var(--pd-ease), color .2s var(--pd-ease);
+}
+.pd-breadcrumb__back:hover {
+    border-color: var(--pd-border-strong);
+    background: var(--pd-surface-alt);
+    color: var(--pd-text);
+}
+.pd-breadcrumb__current {
+    font-weight: 600;
+    color: var(--pd-text);
+}
+
+/* Cards (categorii și produse) */
+.pd-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 22px;
+}
+.pd-cards--products {
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+.pd-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    background: var(--pd-surface);
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius);
+    box-shadow: var(--pd-shadow-sm);
+    cursor: pointer;
+    text-align: center;
+    font-family: inherit;
+    transition: transform .35s var(--pd-ease), box-shadow .35s var(--pd-ease), border-color .35s var(--pd-ease);
+    will-change: transform;
+}
+.pd-card:hover {
+    border-color: var(--pd-border-strong);
+    box-shadow: var(--pd-shadow-hover);
+    transform: translateY(-6px);
+}
+.pd-card:active {
+    transform: translateY(-2px);
+}
+.pd-card__icon,
+.pd-card__thumb {
+    width: 104px;
+    height: 104px;
+    object-fit: cover;
+    border-radius: var(--pd-radius-sm);
+    background: var(--pd-surface-alt);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+    color: var(--pd-text-faint);
+    transition: transform .45s var(--pd-ease);
+}
+.pd-card--category .pd-card__icon {
+    border-radius: 50%;
+}
+.pd-card--product .pd-card__thumb {
+    width: 100%;
+    height: 220px;
+    object-fit: cover;
+    object-position: top;
+    background: var(--pd-surface-alt);
+}
+.pd-card:hover .pd-card__thumb,
+.pd-card:hover .pd-card__icon {
+    transform: scale(1.04);
+}
+.pd-card__name {
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--pd-text);
+    transition: color .2s var(--pd-ease);
+}
+.pd-card:hover .pd-card__name { color: var(--pd-accent); }
+.pd-card__meta {
+    font-size: 12.5px;
+    color: var(--pd-text-faint);
+    font-weight: 500;
+}
+.pd-card__price {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--pd-text);
+}
+.pd-card__price .woocommerce-Price-amount,
+.pd-card__price ins,
+.pd-card__price del {
+    font-size: inherit;
+}
+.pd-card__price del { color: var(--pd-text-faint); font-weight: 500; margin-right: 6px; }
+
+.pd-loading,
+.pd-empty,
+.pd-error {
+    text-align: center;
+    padding: 56px 20px;
+    color: var(--pd-text-muted);
+    font-size: 14px;
+}
+.pd-error { color: #c0392b; }
+
+/* ==========================================================================
+   Skeleton loading (carduri-fantomă cu shimmer)
+   ========================================================================== */
+.pd-skeleton-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 22px;
+}
+.pd-skeleton-grid--products {
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+.pd-card-skeleton {
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius);
+    background: var(--pd-surface);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+.pd-skel {
+    background: linear-gradient(100deg, #eee 30%, #f6f6f6 50%, #eee 70%);
+    background-size: 200% 100%;
+    animation: pd-shimmer 1.3s var(--pd-ease) infinite;
+    border-radius: var(--pd-radius-sm);
+}
+.pd-card-skeleton .pd-skel--img { width: 104px; height: 104px; border-radius: 50%; }
+.pd-skeleton-grid--products .pd-skel--img { width: 100%; height: 220px; }
+.pd-card-skeleton .pd-skel--line { width: 70%; height: 13px; border-radius: 6px; }
+.pd-card-skeleton .pd-skel--line.short { width: 45%; height: 11px; }
+@keyframes pd-shimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pd-skel { animation: none; }
+}
+
+/* Step 2.5: variation picker */
+.pd-variation-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 460px) minmax(0, 520px);
+    justify-content: center;
+    align-items: start;
+    gap: 40px;
+}
+.pd-variation-preview {
+    margin: 0;
+    position: sticky;
+    top: 24px;
+}
+.pd-variation-preview__img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border: 1px solid var(--pd-border);
+    border-radius: var(--pd-radius);
+    background: var(--pd-surface-alt);
+}
+.pd-variation-preview__caption {
+    margin-top: 12px;
+    font-size: 14px;
+    color: var(--pd-text-muted);
+    text-align: center;
+}
+.pd-variation-attrs {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 600px;
+    margin: 0 auto;
+    width: 100%;
+}
+.pd-variation-attr {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.pd-variation-attr__label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--pd-text-muted);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+.pd-variation-attr__options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.pd-variation-option {
+    background: var(--pd-surface);
+    border: 1px solid var(--pd-border);
+    padding: 11px 20px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: var(--pd-radius-pill);
+    font-family: inherit;
+    color: var(--pd-text);
+    transition: border-color .2s var(--pd-ease), background-color .2s var(--pd-ease),
+                color .2s var(--pd-ease), transform .08s var(--pd-ease), box-shadow .2s var(--pd-ease);
+    min-width: 56px;
+}
+.pd-variation-option:hover:not(.is-active) {
+    border-color: var(--pd-accent);
+    background: var(--pd-accent-soft);
+    color: var(--pd-text);
+}
+.pd-variation-option.is-active {
+    background: var(--pd-dark);
+    border-color: var(--pd-dark);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .14);
+}
+.pd-variation-option:active { transform: translateY(1px); }
+.pd-variation-actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 36px;
+}
+.pd-continue-to-design {
+    background: var(--pd-dark);
+    color: #fff;
+    border: none;
+    padding: 15px 36px;
+    border-radius: var(--pd-radius-sm);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: .01em;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background-color .25s var(--pd-ease), transform .12s var(--pd-ease), box-shadow .25s var(--pd-ease);
+}
+.pd-continue-to-design:hover:not(:disabled) {
+    background: #333;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .16);
+}
+.pd-continue-to-design:active:not(:disabled) { transform: translateY(0); }
+.pd-continue-to-design:disabled { background: #cfcfcf; cursor: not-allowed; }
+
+/* Step 3: layout designer — [unelte | scenă | comanda ta]
+   CRITIC: HEIGHT EXPLICIT pe desktop ca să decuplăm wrap-ul de canvas-container
+   (wrapper-ul Fabric). Cu min-height + auto-row, grid-ul se dimensiona după
+   canvas-container → fit-ul micșora wrap-ul → BUCLĂ DE SHRINKING. Cu height
+   explicit + rânduri 1fr, totul e stabil indiferent de conținut. */
+.pd-designer-layout {
+    display: grid;
+    grid-template-columns: 288px minmax(0, 1fr) 304px;
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
+    align-items: stretch;
+    height: max(540px, calc(var(--pd-vh, 1vh) * 100 - 150px));
+    background: var(--pd-stage);
+}
+@supports (height: 100dvh) {
+    .pd-designer-layout {
+        height: max(540px, calc(100dvh - 150px));
+    }
+}
+.pd-designer-layout .pd-canvas-wrap {
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* ==========================================================================
+   App bar-ul pasului 3 (desktop + mobil) — înlocuiește header-ul mare și
+   breadcrumb-ul. Același look ca bara modalului de pe pagina de produs.
+   ========================================================================== */
+.pd-step3-bar { display: none; }
+
+.pd-constructor[data-step="3"] .pd-step3-bar {
+    display: flex;
+    grid-row: 1;
+    align-items: center;
+    gap: 8px;
+    height: 56px;
+    padding: 0 16px 0 10px;
+    box-sizing: border-box;
+    background: var(--pd-surface);
+    border-bottom: 1px solid var(--pd-line);
+    z-index: 60;
+}
+.pd-step3-bar__back {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--pd-ctl-radius);
+    background: transparent;
+    color: var(--pd-text);
+    font-family: inherit;
+    cursor: pointer;
+    transition: background-color .15s var(--pd-ease);
+}
+.pd-step3-bar__back:hover { background: var(--pd-hover); }
+.pd-step3-bar__title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--pd-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pd-step3-bar__save {
+    flex: none;
+    height: 36px;
+    padding: 0 16px;
+    border: 0;
+    border-radius: var(--pd-ctl-radius);
+    background: var(--pd-dark);
+    color: #fff;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.pd-step3-bar__save:active { background: #333; }
+.pd-step3-bar__back:focus-visible,
+.pd-step3-bar__save:focus-visible {
+    outline: 2px solid var(--pd-select);
+    outline-offset: 2px;
+}
+/* Pe desktop, Salvează stă în panoul „Comanda ta". */
+@media (min-width: 901px) {
+    .pd-constructor[data-step="3"] .pd-step3-bar__save {
+        display: none;
+    }
+}
+
+/* Designer layout în panelul 3 (flex column) — umple tot spațiul. */
+.pd-constructor[data-step="3"] .pd-designer-layout {
+    flex: 1;
+    height: auto;
+    max-height: none;
+    min-height: 0;
+}
+
+/* ==========================================================================
+   Panoul „Comanda ta" (dreapta pe desktop, bottom-sheet pe mobil)
+   ========================================================================== */
+.pd-summary {
+    display: flex;
+    flex-direction: column;
+    background: var(--pd-surface);
+    font-family: var(--pd-font);
+    color: var(--pd-text);
+}
+.pd-summary__product {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.pd-summary .pd-summary__thumb {
+    display: block;
+    width: 100%;
+    max-width: none;
+    height: 180px;
+    margin: 0 0 12px;
+    object-fit: cover;
+    object-position: top;
+    border-radius: 10px;
+    background: var(--pd-stage);
+}
+.pd-summary__name {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--pd-text);
+}
+.pd-summary__price {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--pd-text);
+}
+.pd-summary__price .woocommerce-Price-amount {
+    font-size: inherit;
+    color: inherit;
+}
+.pd-summary__price del { color: var(--pd-text-faint); font-weight: 500; margin-right: 6px; }
+.pd-summary .pd-summary__note {
+    margin: 8px 0 0;
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--pd-text-muted);
+}
+.pd-summary .pd-summary__note--extra {
+    font-weight: 600;
+    color: var(--pd-text);
+}
+.pd-summary__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+@media (min-width: 901px) {
+    .pd-summary {
+        min-height: 0;
+        padding: 20px 20px 0;
+        border-left: 1px solid var(--pd-line);
+        overflow-y: auto;
+    }
+    /* Acțiunile stau jos, sub o linie pe toată lățimea panoului. */
+    .pd-summary__actions {
+        position: sticky;
+        bottom: 0;
+        margin: auto -20px 0;
+        padding: 16px 20px 20px;
+        border-top: 1px solid var(--pd-line);
+        background: var(--pd-surface);
+    }
+}
+
+.pd-btn-secondary,
+.pd-add-to-cart-final {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    border-radius: var(--pd-ctl-radius);
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color .15s var(--pd-ease), border-color .15s var(--pd-ease);
+}
+.pd-btn-secondary {
+    height: 40px;
+    padding: 0 16px;
+    background: var(--pd-surface);
+    border: 1px solid var(--pd-border-strong);
+    color: var(--pd-text);
+    font-size: 13.5px;
+}
+.pd-btn-secondary:hover { background: var(--pd-hover); border-color: #c4c4c4; }
+.pd-add-to-cart-final {
+    height: 44px;
+    padding: 0 16px;
+    background: var(--pd-dark);
+    border: 0;
+    color: #fff;
+    font-size: 14px;
+}
+.pd-add-to-cart-final:hover:not(:disabled) { background: #262626; }
+.pd-add-to-cart-final:disabled {
+    background: #d4d4d4;
+    cursor: not-allowed;
+}
+.pd-btn-secondary:focus-visible,
+.pd-add-to-cart-final:focus-visible {
+    outline: 2px solid var(--pd-select);
+    outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Mobile responsive — strategy:
+   - ≤900px: pasul 3 devine app full-screen (fixed inset:0, dvh).
+     Layout grid: top-bar / canvas (1fr) / bottom-bar.
+     Sidebar-ul `.pd-tools` se dizolvă (display:contents) — controalele apar
+     în .pd-bottom-bar și .pd-text-controls/.pd-summary devin bottom-sheets.
+   - ≤980px: pașii 1, 2, 2.5 (selecție categorie/produs) păstrează layout
+     vertical normal cu padding redus.
+   - ≤600px: titlul ascuns, progress compact, carduri auto-fill.
+*/
+
+@media (max-width: 980px) {
+    .pd-constructor { padding: 16px 12px 40px; }
+
+    /* Pașii 1, 2, 2.5 — layout normal cu spacing redus. */
+    .pd-variation-layout { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+    .pd-variation-preview { position: static; max-width: 420px; width: 100%; margin: 0 auto; }
+    .pd-variation-attr__options { gap: 8px; }
+    .pd-variation-option { min-height: 44px; padding: 10px 14px; font-size: 14px; }
+    .pd-continue-to-design { width: 100%; padding: 16px 24px; font-size: 16px; }
+    .pd-add-to-cart-final { height: 52px; font-size: 16px; }
+}
+
+/* Pasul 3 (designer) pe mobile — full-screen app cu canvas care fitează viewport-ul. */
+@media (max-width: 900px) {
+    /* Constructor în pasul 3: fixed full-screen ca să avem control complet
+       asupra layout-ului (grid: header / canvas / bottom-bar). */
+    .pd-constructor[data-step="3"] {
+        position: fixed;
+        inset: 0;
+        max-width: none;
+        margin: 0;
+        padding: 0;
+        height: calc(var(--pd-vh) * 100);
+        display: grid;
+        /* top bar / canvas (1fr) / text quick bar (auto, 0 când e hidden) / bottom bar */
+        grid-template-rows: auto 1fr auto auto;
+        /* Coloana implicită (auto) creștea după wrap-ul cu aspect-ratio
+           (înălțimea rândului × aspect > lățimea ecranului) și tăia bottom-bar-ul. */
+        grid-template-columns: minmax(0, 1fr);
+        overflow: hidden;
+        z-index: 10000;
+        background: var(--pd-stage);
+    }
+    @supports (height: 100dvh) {
+        .pd-constructor[data-step="3"] { height: 100dvh; }
+    }
+    /* Header mare + breadcrumb originale ascunse pe mobile la pasul 3. */
+    .pd-constructor[data-step="3"] .pd-constructor__header,
+    .pd-constructor[data-step="3"] .pd-constructor__panel[data-panel="3"] .pd-breadcrumb {
+        display: none;
+    }
+    /* App bar compact, cu safe-area. */
+    .pd-constructor[data-step="3"] .pd-step3-bar {
+        height: auto;
+        min-height: 52px;
+        padding: 6px 8px;
+        padding-top: max(6px, env(safe-area-inset-top));
+    }
+    .pd-step3-bar__back { width: 44px; height: 44px; }
+    .pd-step3-bar__save { height: 40px; }
+
+    /* Active panel (3) ocupă restul prin grid contents. */
+    .pd-constructor[data-step="3"] .pd-constructor__panel[data-panel="3"] {
+        display: contents;
+        animation: none;
+    }
+    .pd-designer-layout {
+        display: contents;
+    }
+    /* Aspectul mockup-ului vine din regula globală (designer.css); restul
+       rândului 1fr e zona gri a .pd-constructor (panelul e display: contents). */
+    .pd-designer-layout .pd-canvas-wrap {
+        grid-row: 2;
+        order: 1;
+    }
+
+    /* Quick bar (text selectat) pe rândul 3, bottom-bar pe 4. Rândurile sunt
+       explicite: cu auto-placement, quick bar-ul ar cădea SUB bottom-bar. */
+    .pd-constructor[data-step="3"] .pd-text-quickbar { grid-row: 3; order: 2; }
+    .pd-constructor[data-step="3"] .pd-bottom-bar { grid-row: 4; order: 3; }
+}
+
+@media (max-width: 600px) {
+    .pd-constructor { padding: 12px 10px 32px; }
+    .pd-panel__heading { font-size: 18px; margin-bottom: 14px; }
+
+    /* Pe mobile la pașii 1/2/2.5 ascundem H1 mare. */
+    .pd-constructor:not([data-step="3"]) .pd-constructor__title {
+        font-size: 18px;
+        margin-bottom: 10px;
+    }
+
+    /* Progress: număr + label doar pentru pasul activ; conectorii micșorați. */
+    .pd-progress { gap: 6px; }
+    .pd-progress__step { font-size: 0; gap: 6px; }
+    .pd-progress__step.is-active { font-size: 13px; }
+    .pd-progress__step.is-active .pd-progress__label { display: inline; }
+    .pd-progress__step:not(.is-active) .pd-progress__label { display: none; }
+    .pd-progress__num { width: 24px; height: 24px; font-size: 12px; }
+    .pd-progress__step + .pd-progress__step::before { width: 14px; margin-right: 6px; }
+
+    /* Carduri auto-fill: 2 col natural pe 375px, 1 col pe 320px. */
+    .pd-cards { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+    .pd-cards--products { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    .pd-card { padding: 10px 8px; min-height: 48px; }
+    .pd-card__icon, .pd-card__thumb { width: 56px; height: 56px; }
+    .pd-card--product .pd-card__thumb { width: 100%; height: 120px; object-fit: contain; }
+    .pd-card__name { font-size: 13px; line-height: 1.25; }
+    .pd-card__meta, .pd-card__price { font-size: 12px; }
+
+    /* Breadcrumb wrap mai curat (folosit la pașii 2 și 2.5). */
+    .pd-breadcrumb { font-size: 13px; gap: 8px; }
+    .pd-breadcrumb__back { min-height: 44px; padding: 10px 14px; }
+}

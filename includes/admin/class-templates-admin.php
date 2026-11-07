@@ -11,6 +11,7 @@ namespace ProductDesigner\Admin;
 
 use ProductDesigner\Core\Templates;
 use ProductDesigner\Core\Design_Storage;
+use ProductDesigner\Core\I18n_Polylang;
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
@@ -106,6 +107,9 @@ final class Templates_Admin {
 
         $query     = new \WP_Query( $args );
         $all_terms = get_terms( [ 'taxonomy' => Templates::TAXONOMY, 'hide_empty' => false ] );
+
+        // Coloana de traduceri apare doar cu Polylang activ si cel putin 2 limbi.
+        $pd_languages = self::polylang_languages();
         ?>
         <div class="wrap pd-templates-wrap">
             <h1 class="wp-heading-inline"><?php esc_html_e( 'Templates Constructor', 'product-designer' ); ?></h1>
@@ -148,12 +152,17 @@ final class Templates_Admin {
                         <th><?php esc_html_e( 'Categorie', 'product-designer' ); ?></th>
                         <th><?php esc_html_e( 'Status', 'product-designer' ); ?></th>
                         <th><?php esc_html_e( 'Mockup', 'product-designer' ); ?></th>
+                        <?php if ( ! empty( $pd_languages ) ) : ?>
+                            <th style="width:<?php echo (int) ( 26 * count( $pd_languages ) + 20 ); ?>px;">
+                                <?php esc_html_e( 'Traduceri', 'product-designer' ); ?>
+                            </th>
+                        <?php endif; ?>
                     </tr>
                 </thead>
                 <tbody>
                 <?php if ( ! $query->have_posts() ) : ?>
                     <tr>
-                        <td colspan="7">
+                        <td colspan="<?php echo empty( $pd_languages ) ? 7 : 8; ?>">
                             <p style="text-align:center; padding:30px 10px;">
                                 <?php esc_html_e( 'Niciun template încă. Folosește butonul „Adaugă template nou" de mai sus.', 'product-designer' ); ?>
                             </p>
@@ -197,6 +206,11 @@ final class Templates_Admin {
                                 <span style="color:#a00;">⚠ <?php esc_html_e( 'Lipsă', 'product-designer' ); ?></span>
                             <?php endif; ?>
                         </td>
+                        <?php if ( ! empty( $pd_languages ) ) : ?>
+                            <td class="pd-languages-cell">
+                                <?php self::render_language_links( (int) get_the_ID(), $pd_languages ); ?>
+                            </td>
+                        <?php endif; ?>
                     </tr>
                 <?php endwhile; wp_reset_postdata(); endif; ?>
                 </tbody>
@@ -223,6 +237,48 @@ final class Templates_Admin {
             <?php endif; ?>
         </div>
         <?php
+    }
+
+    /**
+     * Limbile Polylang, sau array gol daca Polylang lipseste ori site-ul e
+     * monolingv.
+     *
+     * @return string[] Slug-uri de limba.
+     */
+    private static function polylang_languages() : array {
+        if ( ! I18n_Polylang::is_active() || ! function_exists( 'pll_languages_list' ) ) {
+            return [];
+        }
+        $languages = (array) pll_languages_list( [ 'fields' => 'slug' ] );
+        return count( $languages ) > 1 ? $languages : [];
+    }
+
+    /**
+     * Randeaza steagul limbii proprii + linkurile „+" catre traducerile lipsa,
+     * exact ca in lista standard de produse.
+     *
+     * Pagina asta e un tabel scris de mana, nu un WP_List_Table pe `edit.php`,
+     * deci hook-urile `manage_edit-product_columns` /
+     * `manage_product_posts_custom_column` prin care Polylang isi injecteaza
+     * coloanele nu se declanseaza aici. Refolosim direct renderer-ul lui
+     * (`PLL_Admin_Filters_Columns::post_column()`, o celula per limba) ca sa
+     * pastram acelasi markup, aceleasi iconite si acelasi link
+     * `post-new.php?from_post=...&new_lang=...` — cel care declanseaza copierea
+     * meta-urilor prin `pll_copy_post_metas`.
+     *
+     * @param string[] $languages Slug-uri de limba.
+     */
+    private static function render_language_links( int $post_id, array $languages ) : void {
+        $pll = function_exists( 'PLL' ) ? PLL() : null;
+        if ( ! $pll || ! isset( $pll->filters_columns ) || ! is_object( $pll->filters_columns ) ) {
+            return;
+        }
+        foreach ( $languages as $lang ) {
+            echo '<span class="pd-language-link">';
+            // Echo direct: markup-ul e generat si escapat de Polylang.
+            $pll->filters_columns->post_column( 'language_' . $lang, $post_id );
+            echo '</span>';
+        }
     }
 
     /**
@@ -288,6 +344,13 @@ final class Templates_Admin {
         // Forțează ascundere din catalog + search dacă e template.
         if ( get_post_meta( $post_id, Templates::META_IS_TEMPLATE, true ) === 'yes' ) {
             wp_set_object_terms( $post_id, [ 'exclude-from-catalog', 'exclude-from-search' ], 'product_visibility', false );
+
+            // Un template fără `_pd_enabled` nu poate porni editorul (REST-ul
+            // `/constructor/product-config` îl respinge). Meta se pune la
+            // creare, dar traducerile/duplicatele pot ajunge aici fără ea.
+            if ( ! metadata_exists( 'post', $post_id, Design_Storage::META_ENABLED ) ) {
+                update_post_meta( $post_id, Design_Storage::META_ENABLED, 'yes' );
+            }
         }
     }
 
@@ -361,6 +424,9 @@ final class Templates_Admin {
             .pd-badge--template { background:#1a73e8; color:#fff; }
             .pd-badge--enabled  { background:#e8f0fe; color:#1a73e8; }
             .pd-templates-wrap .pd-templates-table img { vertical-align:middle; }
+            .pd-languages-cell { white-space:nowrap; }
+            .pd-language-link { display:inline-block; margin-right:6px; vertical-align:middle; }
+            .pd-language-link:last-child { margin-right:0; }
         ' );
     }
 }

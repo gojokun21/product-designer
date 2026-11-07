@@ -9,6 +9,8 @@
 namespace ProductDesigner\Woocommerce;
 
 use ProductDesigner\Core\Design_Storage;
+use ProductDesigner\Core\I18n_Polylang;
+use ProductDesigner\Core\Validator;
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
@@ -49,11 +51,17 @@ final class Order {
             $product_id = (int) $item->get_product_id();
             if ( $product_id && $this->storage->is_enabled_for_product( $product_id )
                 && function_exists( 'WC' ) && WC()->session ) {
-                $saved = WC()->session->get( 'pd_design_for_' . $product_id );
-                if ( is_array( $saved ) && ! empty( $saved['design_id'] ) ) {
-                    $design = $saved;
-                    if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-                        error_log( "[Product Designer] transfer_to_order: design preluat din session ca fallback pentru product $product_id." );
+                // Cheia de sesiune e ID-ul sub care REST-ul a salvat designul;
+                // Polylang for WooCommerce poate fi tradus ID-ul intre timp la
+                // add-to-cart, deci cautam si prin traduceri.
+                foreach ( I18n_Polylang::translation_ids( $product_id ) as $lookup_id ) {
+                    $saved = WC()->session->get( 'pd_design_for_' . $lookup_id );
+                    if ( is_array( $saved ) && ! empty( $saved['design_id'] ) ) {
+                        $design = $saved;
+                        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                            error_log( "[Product Designer] transfer_to_order: design preluat din session ca fallback pentru product $lookup_id." );
+                        }
+                        break;
                     }
                 }
             }
@@ -74,6 +82,24 @@ final class Order {
         $item->add_meta_data( Design_Storage::ITEM_META_PREVIEW_URL,      $design['preview_url']      ?? '' );
         $item->add_meta_data( Design_Storage::ITEM_META_PREVIEW_BACK_URL, $design['preview_back_url'] ?? '' );
         $item->add_meta_data( Design_Storage::ITEM_META_JSON_URL,         $design['json_url']         ?? '' );
+
+        // Lizibilă pentru client și producție: pe ce parte se imprimă și cât a
+        // costat a doua parte.
+        $sides = Cart::print_sides_label( $design );
+        if ( $sides !== '' ) {
+            $item->add_meta_data( __( 'Imprimeu pe', 'product-designer' ), $sides );
+        }
+
+        $mockup_color = Validator::sanitize_hex( $design['mockup_color'] ?? '' );
+        if ( $mockup_color !== '' ) {
+            // Cheia internă (prefixată) pentru procesare + o meta lizibilă care
+            // apare automat clientului în emailuri / contul meu / thank-you page.
+            // Eticheta folosește numele termenului („Alb") când hex-ul provine
+            // dintr-o variație; culorile custom rămân ca hex.
+            $label = $this->storage->color_label_for_variation( $mockup_color, (array) ( $values['variation'] ?? [] ) );
+            $item->add_meta_data( Design_Storage::ITEM_META_MOCKUP_COLOR, $mockup_color );
+            $item->add_meta_data( __( 'Culoare produs', 'product-designer' ), $label !== '' ? $label : $mockup_color );
+        }
 
         if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
             error_log( sprintf(
@@ -153,6 +179,7 @@ final class Order {
             Design_Storage::ITEM_META_PREVIEW_URL,
             Design_Storage::ITEM_META_PREVIEW_BACK_URL,
             Design_Storage::ITEM_META_JSON_URL,
+            Design_Storage::ITEM_META_MOCKUP_COLOR,
         ];
         foreach ( $formatted as $id => $meta ) {
             if ( isset( $meta->key ) && in_array( $meta->key, $hidden, true ) ) {

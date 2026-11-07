@@ -1,0 +1,4 @@
+node_modules/
+
+# Build output (assets/dist) is committed so the plugin runs without a build
+# step on the server. Run `npm run build` after changing anything under src/.
